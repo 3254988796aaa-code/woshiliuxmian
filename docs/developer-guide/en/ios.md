@@ -34,7 +34,7 @@ The iOS CMake build does not provide an `all_tests` target. Validate affected un
 ## Framework contents
 
 - `SeekDB`: the engine, its Rust libraries and third-party libraries linked into one arm64 dynamic library that depends only on system libraries
-- `Headers/seekdb.h`: `seekdb_open`, `seekdb_close` and `seekdb_connection_options`
+- `Headers/seekdb.h`: `seekdb_open`, `seekdb_last_open_error`, `seekdb_close` and `seekdb_connection_options`, with the same declarations as the desktop `seekdb.h`
 - `Info.plist`, `build-manifest.json` (source revision, checksums, exported symbols), `rust-Cargo.lock` and `Licenses/`
 
 The device and simulator frameworks are not interchangeable. The framework is not signed for distribution; Xcode signs it with the app when it is added with **Embed & Sign**.
@@ -44,7 +44,7 @@ The device and simulator frameworks are not interchangeable. The framework is no
 The framework only starts and stops the engine. Run SQL with a MySQL-compatible client library of your choice over the Unix socket that `seekdb_connection_options` returns, as user `root` with an empty password:
 
 ```c
-#include <stddef.h>
+#include <stdio.h>
 #include <SeekDB/seekdb.h>
 
 SeekdbHandle db = NULL;
@@ -52,9 +52,11 @@ const char *parameters[] = {"memory_budget", "1G", NULL};
 if (seekdb_open(absolute_data_dir, parameters, &db) == SEEKDB_SUCCESS) {
   SeekdbConnectionOptions options;
   seekdb_connection_options(db, &options);
-  /* Connect your MySQL client to the socket options.endpoint as options.user. */
+  /* Connect your MySQL client to the socket options.unix_socket as options.user. */
   /* Close the client's connections before the last seekdb_close. */
   seekdb_close(db);
+} else {
+  fprintf(stderr, "%s\n", seekdb_last_open_error());
 }
 ```
 

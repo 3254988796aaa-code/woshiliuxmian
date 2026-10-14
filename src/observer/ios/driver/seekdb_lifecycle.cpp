@@ -62,6 +62,13 @@ struct Engine {
   std::atomic<int> result{0};
 };
 Engine engine;
+thread_local std::string last_open_error;
+
+int open_failed(int code, const char *message)
+{
+  last_open_error = message;
+  return code;
+}
 
 /** Resolve existing parents so fresh and existing paths use the same singleton identity. */
 std::string canonical_directory(const char *directory)
@@ -100,26 +107,26 @@ void *run_engine(void *)
 }
 
 /** Validate desktop key/value syntax and the iOS socket-only restriction. */
-int validate_parameters(const char **parameters)
+const char *invalid_parameters(const char **parameters)
 {
   for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
     if (parameters[i][0] == '\0' || parameters[i + 1] == nullptr) {
-      return SEEKDB_INVALID_ARGUMENT;
+      return "parameters must be key/value pairs with non-empty keys";
     }
     if (std::strcmp(parameters[i], "port") == 0) {
       char *end = nullptr;
       errno = 0;
       long port = std::strtol(parameters[i + 1], &end, 10);
       if (errno != 0 || parameters[i + 1][0] == '\0' || *end != '\0' || port != 0) {
-        return SEEKDB_INVALID_ARGUMENT;
+        return "TCP is not available on iOS; port must be 0";
       }
     }
     if (std::strcmp(parameters[i], "mysql_port_mode") == 0
         && std::strcmp(parameters[i + 1], "disabled") != 0) {
-      return SEEKDB_INVALID_ARGUMENT;
+      return "TCP is not available on iOS; mysql_port_mode must be disabled";
     }
   }
-  return SEEKDB_SUCCESS;
+  return nullptr;
 }
 
 /** Release a sandbox socket alias and the opaque handle's owned strings. */
@@ -233,25 +240,35 @@ extern "C" {
 /** Open the singleton on a background thread, blocking until its socket accepts SQL clients. */
 int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *out_handle)
 {
+  last_open_error.clear();
   if (out_handle == nullptr) {
-    return SEEKDB_INVALID_ARGUMENT;
+    return open_failed(SEEKDB_INVALID_ARGUMENT, "out_handle must not be NULL");
   }
   *out_handle = nullptr;
-  if (directory == nullptr || directory[0] != '/' || validate_parameters(parameters) != SEEKDB_SUCCESS) {
-    return SEEKDB_INVALID_ARGUMENT;
+  if (directory == nullptr || directory[0] != '/') {
+    return open_failed(SEEKDB_INVALID_ARGUMENT, "db_dir must be an absolute path");
+  }
+  if (const char *message = invalid_parameters(parameters)) {
+    return open_failed(SEEKDB_INVALID_ARGUMENT, message);
   }
   std::lock_guard<std::mutex> guard(engine.mutex);
   std::string canonical = canonical_directory(directory);
   if (canonical.empty()) {
-    return SEEKDB_INVALID_ARGUMENT;
+    return open_failed(SEEKDB_INVALID_ARGUMENT, "cannot resolve db_dir");
   }
-  if (engine.started && (engine.handles == 0 || engine.directory != canonical
-      || seekdb_ios_get_state() != SEEKDB_IOS_RUNNING)) {
-    return SEEKDB_INTERNAL_ERROR;
+  if (engine.started && engine.handles == 0) {
+    return open_failed(SEEKDB_INTERNAL_ERROR,
+                       "the engine already stopped in this process; restart the App to open a database again");
+  }
+  if (engine.started && engine.directory != canonical) {
+    return open_failed(SEEKDB_INTERNAL_ERROR, "another db_dir is already open in this process");
+  }
+  if (engine.started && seekdb_ios_get_state() != SEEKDB_IOS_RUNNING) {
+    return open_failed(SEEKDB_INTERNAL_ERROR, "the engine is no longer running");
   }
   auto *handle = static_cast<SeekdbHandleImpl *>(std::calloc(1, sizeof(SeekdbHandleImpl)));
   if (handle == nullptr) {
-    return SEEKDB_INTERNAL_ERROR;
+    return open_failed(SEEKDB_INTERNAL_ERROR, "out of memory");
   }
   if (!engine.started) {
     engine.directory = canonical;
@@ -259,7 +276,7 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
   handle->db_dir = strdup(canonical.c_str());
   if (handle->db_dir == nullptr || !prepare_socket(handle)) {
     destroy_handle(handle);
-    return SEEKDB_INTERNAL_ERROR;
+    return open_failed(SEEKDB_INTERNAL_ERROR, "cannot prepare the Unix socket path");
   }
   if (!engine.started) {
     for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; ++i) {
@@ -282,13 +299,15 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
       engine.parameters.clear();
       engine.arguments.clear();
       destroy_handle(handle);
-      return SEEKDB_INTERNAL_ERROR;
+      return open_failed(SEEKDB_INTERNAL_ERROR, "cannot start the engine thread");
     }
     engine.started = true;
     bool ready = false;
+    bool stopped = false;
     for (unsigned int attempt = 0; attempt < 1500; ++attempt) {
       auto state = seekdb_ios_get_state();
       if (state == SEEKDB_IOS_FAILED || state == SEEKDB_IOS_STOPPED) {
+        stopped = true;
         break;
       }
       if (state == SEEKDB_IOS_RUNNING && socket_ready(handle)) {
@@ -300,7 +319,9 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
     if (!ready) {
       stop_engine();
       destroy_handle(handle);
-      return SEEKDB_INTERNAL_ERROR;
+      return open_failed(SEEKDB_INTERNAL_ERROR, stopped
+                         ? "the engine stopped during startup; see the log directory under db_dir"
+                         : "the engine did not accept SQL connections within 300 seconds; see the log directory under db_dir");
     }
   }
   ++engine.handles;
@@ -319,9 +340,14 @@ int seekdb_connection_options(SeekdbHandle opaque, SeekdbConnectionOptions *out_
     return SEEKDB_INTERNAL_ERROR;
   }
   out_options->transport = SEEKDB_CONNECTION_TRANSPORT_UNIX_SOCKET;
-  out_options->endpoint = handle->sock_path;
+  out_options->unix_socket = handle->sock_path;
   out_options->user = "root";
   return SEEKDB_SUCCESS;
+}
+
+const char *seekdb_last_open_error(void)
+{
+  return last_open_error.c_str();
 }
 
 /** Release this handle; the last handle stops and joins the one-shot engine. */

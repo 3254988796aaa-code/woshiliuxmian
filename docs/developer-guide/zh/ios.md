@@ -34,7 +34,7 @@ iOS CMake 构建不提供 `all_tests` 目标。单元测试修改应按照[编�
 ## framework 内容
 
 - `SeekDB`：引擎、Rust 库和第三方库链接成的一个 arm64 动态库，只依赖系统库
-- `Headers/seekdb.h`：声明 `seekdb_open`、`seekdb_close` 和 `seekdb_connection_options`
+- `Headers/seekdb.h`：声明 `seekdb_open`、`seekdb_last_open_error`、`seekdb_close` 和 `seekdb_connection_options`，与桌面版 `seekdb.h` 中的声明相同
 - `Info.plist`、`build-manifest.json`（源码 revision、校验和、导出符号）、`rust-Cargo.lock` 和 `Licenses/`
 
 真机和模拟器的 framework 不能混用。framework 没有用于分发的签名；在 Xcode 中以 **Embed & Sign** 方式加入 App 后，会随 App 一起签名。
@@ -44,7 +44,7 @@ iOS CMake 构建不提供 `all_tests` 目标。单元测试修改应按照[编�
 framework 只负责启动和停止引擎。执行 SQL 时，使用任意 MySQL 兼容的客户端库，连接 `seekdb_connection_options` 返回的 Unix socket，用户为 `root`，密码为空：
 
 ```c
-#include <stddef.h>
+#include <stdio.h>
 #include <SeekDB/seekdb.h>
 
 SeekdbHandle db = NULL;
@@ -52,9 +52,11 @@ const char *parameters[] = {"memory_budget", "1G", NULL};
 if (seekdb_open(absolute_data_dir, parameters, &db) == SEEKDB_SUCCESS) {
   SeekdbConnectionOptions options;
   seekdb_connection_options(db, &options);
-  /* 用 MySQL 客户端以 options.user 连接 socket options.endpoint。 */
+  /* 用 MySQL 客户端以 options.user 连接 socket options.unix_socket。 */
   /* 最后一次调用 seekdb_close 之前，先关闭客户端的连接。 */
   seekdb_close(db);
+} else {
+  fprintf(stderr, "%s\n", seekdb_last_open_error());
 }
 ```
 

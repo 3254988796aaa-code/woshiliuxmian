@@ -34,7 +34,9 @@ typedef enum {
 typedef struct {
     const char *transport;
     unsigned int port;
-    const char *endpoint;
+    const char *host;
+    const char *unix_socket;
+    const char *named_pipe;
     const char *user;
 } SeekdbConnectionOptions;
 
@@ -51,17 +53,24 @@ typedef struct {
  * log_disk_size=2G unless the caller overrides them; additional server keys
  * may also be supplied. On restart, persisted values are kept (issue #26). */
 int seekdb_open(const char *db_dir, const char **parameters, SeekdbHandle *out_handle);
+/* Description of the most recent seekdb_open failure on the calling thread.
+ * Empty before the first open and after a successful open. The borrowed string
+ * remains valid until the next seekdb_open on this thread (or thread exit).
+ * No handle is required. Copy it before another open if it must be retained.
+ * Startup diagnostics describe the driver stage; server-internal failures may
+ * require inspecting the instance's log directory. */
+const char *seekdb_last_open_error(void);
 int seekdb_close(SeekdbHandle handle);
 
 /* Return the MySQL-protocol connection options for an open handle.
  *
- * transport is "tcp", "unix_socket", or "named_pipe". TCP exposes only port;
- * clients use their default local host. Local transports expose endpoint as a
- * Unix socket path or full Windows named-pipe path. user is always "root".
- * On POSIX, the Unix socket endpoint is a per-handle alias under /tmp and is
- * usable only while the handle remains open.
- * transport, endpoint, and user are borrowed and remain valid until
- * seekdb_close(handle). */
+ * transport is "tcp", "unix_socket", or "named_pipe". TCP returns host and
+ * port; local transports return their corresponding named field. Unused
+ * transport fields are NULL and port is zero for local transports. user is
+ * always "root". On iOS, transport is always "unix_socket"; a long socket path
+ * is replaced by a per-handle short alias under the App's tmp directory, or
+ * under /tmp on the Simulator.
+ * Returned strings are borrowed and remain valid until seekdb_close(handle). */
 int seekdb_connection_options(SeekdbHandle handle, SeekdbConnectionOptions *out_options);
 
 #ifdef __cplusplus

@@ -7,4 +7,5 @@ _seekdb_ios_get_hook_mode
 _seekdb_ios_get_state
 _seekdb_ios_request_stop
 _seekdb_ios_run
+_seekdb_last_open_error
 _seekdb_open
