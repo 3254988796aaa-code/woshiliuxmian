@@ -198,6 +198,8 @@ if(NOT WIN32)
     SEEKDB_IN_PROCESS_BUILD_ID="${SEEKDB_IN_PROCESS_BUILD_ID}"
     SEEKDB_IN_PROCESS_HOOK_MODE="disabled")
   target_link_libraries(seekdb_in_process_runtime PUBLIC oceanbase_static sql_nio)
+  add_library(seekdb_in_process_lifecycle OBJECT EXCLUDE_FROM_ALL in_process/seekdb_lifecycle.cpp)
+  target_link_libraries(seekdb_in_process_lifecycle PUBLIC seekdb_in_process_runtime)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")

@@ -128,7 +128,7 @@ def main():
     if info.get("MinimumOSVersion") != args.deployment or info.get("SeekDBTestHooks") != "disabled":
         raise ValueError("Invalid framework deployment or hook metadata")
     public_header = binary.parent / "Headers/seekdb.h"
-    if public_header.read_bytes() != (source / "src/observer/ios/seekdb.h").read_bytes():
+    if public_header.read_bytes() != (source / "src/observer/in_process/seekdb.h").read_bytes():
         raise ValueError("Public C ABI header is missing or changed")
     if "DYLIB" not in output("otool", "-hv", str(binary)):
         raise ValueError("Expected MH_DYLIB")
