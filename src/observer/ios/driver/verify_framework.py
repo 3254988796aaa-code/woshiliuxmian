@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import plistlib
 from pathlib import Path
 import re
@@ -51,28 +52,43 @@ def archive_inventory(build, source):
     return result
 
 
+def copy_notices(package, destination):
+    for notice in package.iterdir():
+        if notice.is_file() and re.match(r"(?i)^(license|copying|copyright|notice)", notice.name):
+            target = destination / package.name
+            target.mkdir(exist_ok=True)
+            shutil.copyfile(notice, target / notice.name)
+    jemalloc_license = package / "vendor/jemalloc/COPYING"
+    if jemalloc_license.is_file():
+        target = destination / package.name
+        target.mkdir(exist_ok=True)
+        shutil.copyfile(jemalloc_license, target / "jemalloc-COPYING")
+
+
+def cargo_packages(lockfile):
+    packages = []
+    for block in lockfile.read_text().split("[[package]]")[1:]:
+        fields = dict(re.findall(r'^(name|version|source) = "([^"]*)"$', block, re.M))
+        if fields.get("source", "").startswith("registry+"):
+            packages.append(fields["name"] + "-" + fields["version"])
+    return packages
+
+
 def package_licenses(source, destination):
     """Preserve available local dependency notices and the complete Rust dependency lock."""
-    roots = [source / "deps/ios/sources"]
-    cargo_sources = source / "deps/ios/cargo/registry/src"
-    if cargo_sources.is_dir():
-        roots.extend(path for path in cargo_sources.iterdir() if path.is_dir())
-    for root in roots:
-        if not root.is_dir():
-            continue
-        for package in root.iterdir():
-            if not package.is_dir():
-                continue
-            for notice in package.iterdir():
-                if notice.is_file() and re.match(r"(?i)^(license|copying|copyright|notice)", notice.name):
-                    target = destination / package.name
-                    target.mkdir(exist_ok=True)
-                    shutil.copyfile(notice, target / notice.name)
-            jemalloc_license = package / "vendor/jemalloc/COPYING"
-            if jemalloc_license.is_file():
-                target = destination / package.name
-                target.mkdir(exist_ok=True)
-                shutil.copyfile(jemalloc_license, target / "jemalloc-COPYING")
+    sources = source / "deps/ios/sources"
+    if sources.is_dir():
+        for package in sources.iterdir():
+            if package.is_dir():
+                copy_notices(package, destination)
+    cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
+    registries = [path for path in (cargo_home / "registry/src").glob("*") if path.is_dir()]
+    for lockfile in (source / "rust/Cargo.lock", source / "deps/external/Cargo.lock"):
+        for name in cargo_packages(lockfile):
+            package = next((registry / name for registry in registries if (registry / name).is_dir()), None)
+            if package is None:
+                raise ValueError("Cargo package source for license notices is missing: " + name)
+            copy_notices(package, destination)
     shutil.copyfile(source / "LICENSE", destination / "seekdb-LICENSE")
     shutil.copyfile(source / "rust/Cargo.lock", destination.parent / "rust-Cargo.lock")
 
