@@ -17,7 +17,7 @@ OBSERVER_PRIVATE_HEADERS = [
     "dbms_scheduler/ob_dbms_sched_service.h",
     "dbms_scheduler/ob_dbms_sched_table_operator.h",
     "in_process/seekdb_in_process.h",
-    "ios/driver/seekdb.h",
+    "ios/seekdb.h",
     "mysql/ob_async_cmd_driver.h",
     "mysql/ob_async_plan_driver.h",
     "mysql/ob_diag.h",

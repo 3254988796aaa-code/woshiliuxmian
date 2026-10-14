@@ -36,22 +36,14 @@ enum seekdb_in_process_cleanup_status {
   SEEKDB_IN_PROCESS_CLEANUP_WORKING_DIRECTORY = 1 << 2
 };
 
-/**
- * Run the engine inside the calling process, blocking the calling thread until stopped.
- * Call it on a dedicated thread with a large stack, not on a UI thread. The absolute
- * directory is created if needed. This changes the process working directory for the
- * engine's lifetime and restores it before returning, including after startup failure.
- * startup_parameters are NULL-terminated key/value pairs passed to the server on every
- * start; initial_parameters are passed only while the directory holds no database, as the
- * server keeps its persisted configuration afterwards. Either may be NULL, and both must
- * stay valid until return. Returns an engine error code, or zero on clean stop.
- * Only one invocation is supported per process; a failed run cannot be retried.
- */
-int seekdb_in_process_run(const char *absolute_directory, const char *const *startup_parameters,
-                          const char *const *initial_parameters);
+int seekdb_in_process_start(const char *absolute_directory, const char *const *startup_parameters,
+                            const char *const *initial_parameters);
 
-/** Request shutdown; safe from another thread, including during startup. */
-void seekdb_in_process_request_stop(void);
+int seekdb_in_process_stop(void);
+
+const char *seekdb_in_process_socket_path(void);
+
+const char *seekdb_in_process_last_error(void);
 
 /** Return the current lifecycle state without blocking. */
 enum seekdb_in_process_state seekdb_in_process_get_state(void);

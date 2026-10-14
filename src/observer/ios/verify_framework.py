@@ -28,7 +28,7 @@ def digest(path):
 
 def archive_inventory(build, source):
     """Resolve static libraries from the actual framework linker command."""
-    links = list(build.glob("src/observer/ios/driver/CMakeFiles/seekdb_ios_framework.dir/link.txt"))
+    links = list(build.glob("src/observer/ios/CMakeFiles/seekdb_ios_framework.dir/link.txt"))
     if len(links) != 1:
         raise ValueError("Framework link command is missing")
     tokens = shlex.split(links[0].read_text())
@@ -128,7 +128,7 @@ def main():
     if info.get("MinimumOSVersion") != args.deployment or info.get("SeekDBTestHooks") != "disabled":
         raise ValueError("Invalid framework deployment or hook metadata")
     public_header = binary.parent / "Headers/seekdb.h"
-    if public_header.read_bytes() != (source / "src/observer/ios/driver/seekdb.h").read_bytes():
+    if public_header.read_bytes() != (source / "src/observer/ios/seekdb.h").read_bytes():
         raise ValueError("Public C ABI header is missing or changed")
     if "DYLIB" not in output("otool", "-hv", str(binary)):
         raise ValueError("Expected MH_DYLIB")
@@ -149,7 +149,7 @@ def main():
     dependencies = [line.strip().split(" (", 1)[0] for line in output("otool", "-L", str(binary)).splitlines()[1:]]
     if any(dep != identity and not dep.startswith(("/usr/lib/", "/System/Library/")) for dep in dependencies):
         raise ValueError("Non-system dynamic dependency: " + repr(dependencies))
-    expected = set((source / "src/observer/ios/driver/exports.txt").read_text().splitlines())
+    expected = set((source / "src/observer/ios/exports.txt").read_text().splitlines())
     actual = {line.split()[-1] for line in output("nm", "-gU", str(binary)).splitlines() if line.strip()}
     if actual != expected:
         raise ValueError("Unexpected ABI exports: " + repr(actual ^ expected))
