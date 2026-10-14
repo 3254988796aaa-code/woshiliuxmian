@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "seekdb.h"
-#include "../seekdb_ios.h"
+#include "seekdb_in_process.h"
 #include <atomic>
 #include <cerrno>
 #include <cstdlib>
@@ -58,11 +58,13 @@ struct Engine {
   size_t handles = 0;
   std::string directory;
   std::vector<std::string> parameters;
-  std::vector<const char *> arguments;
+  std::vector<const char *> initial;
   std::atomic<int> result{0};
 };
 Engine engine;
 thread_local std::string last_open_error;
+const char *const startup_parameters[] = {
+    "mysql_port_mode", "disabled", "sql_net_thread_count", "2", "cpu_count", "2", nullptr};
 
 int open_failed(int code, const char *message)
 {
@@ -102,8 +104,40 @@ std::string canonical_directory(const char *directory)
 /** Run the in-process engine; the caller joins before releasing its arguments. */
 void *run_engine(void *)
 {
-  engine.result.store(seekdb_ios_run_with_parameters(engine.directory.c_str(), engine.arguments.data()));
+  engine.result.store(seekdb_in_process_run(engine.directory.c_str(), startup_parameters, engine.initial.data()));
   return nullptr;
+}
+
+void prepare_initial_parameters(const char **parameters)
+{
+  const char *defaults[][2] = {
+      {"memory_budget", "1G"}, {"vector_memory_limit", "128M"},
+      {"log_disk_size", "2G"}, {"datafile_maxsize", "20G"}};
+  for (const auto &parameter : defaults) {
+    const char *value = parameter[1];
+    for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
+      if (std::strcmp(parameters[i], parameter[0]) == 0) {
+        value = parameters[i + 1];
+      }
+    }
+    engine.parameters.emplace_back(parameter[0]);
+    engine.parameters.emplace_back(value);
+  }
+  for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
+    bool reserved = false;
+    for (const char *key : {"port", "mysql_port_mode", "cpu_count", "sql_net_thread_count",
+                            "memory_budget", "vector_memory_limit", "log_disk_size", "datafile_maxsize"}) {
+      reserved = reserved || std::strcmp(parameters[i], key) == 0;
+    }
+    if (!reserved) {
+      engine.parameters.emplace_back(parameters[i]);
+      engine.parameters.emplace_back(parameters[i + 1]);
+    }
+  }
+  for (const auto &parameter : engine.parameters) {
+    engine.initial.push_back(parameter.c_str());
+  }
+  engine.initial.push_back(nullptr);
 }
 
 /** Validate desktop key/value syntax and the iOS socket-only restriction. */
@@ -228,7 +262,7 @@ bool socket_ready(const SeekdbHandleImpl *handle)
 /** Stop and join the consumed engine thread before returning to the caller. */
 int stop_engine()
 {
-  seekdb_ios_request_stop();
+  seekdb_in_process_request_stop();
   if (pthread_join(engine.thread, nullptr) != 0) {
     return SEEKDB_INTERNAL_ERROR;
   }
@@ -263,7 +297,7 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
   if (engine.started && engine.directory != canonical) {
     return open_failed(SEEKDB_INTERNAL_ERROR, "another db_dir is already open in this process");
   }
-  if (engine.started && seekdb_ios_get_state() != SEEKDB_IOS_RUNNING) {
+  if (engine.started && seekdb_in_process_get_state() != SEEKDB_IN_PROCESS_RUNNING) {
     return open_failed(SEEKDB_INTERNAL_ERROR, "the engine is no longer running");
   }
   auto *handle = static_cast<SeekdbHandleImpl *>(std::calloc(1, sizeof(SeekdbHandleImpl)));
@@ -279,13 +313,7 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
     return open_failed(SEEKDB_INTERNAL_ERROR, "cannot prepare the Unix socket path");
   }
   if (!engine.started) {
-    for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; ++i) {
-      engine.parameters.emplace_back(parameters[i]);
-    }
-    for (const auto &parameter : engine.parameters) {
-      engine.arguments.push_back(parameter.c_str());
-    }
-    engine.arguments.push_back(nullptr);
+    prepare_initial_parameters(parameters);
     pthread_attr_t attributes;
     int thread_error = pthread_attr_init(&attributes);
     if (thread_error == 0) {
@@ -297,7 +325,7 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
     }
     if (thread_error != 0) {
       engine.parameters.clear();
-      engine.arguments.clear();
+      engine.initial.clear();
       destroy_handle(handle);
       return open_failed(SEEKDB_INTERNAL_ERROR, "cannot start the engine thread");
     }
@@ -305,12 +333,12 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
     bool ready = false;
     bool stopped = false;
     for (unsigned int attempt = 0; attempt < 1500; ++attempt) {
-      auto state = seekdb_ios_get_state();
-      if (state == SEEKDB_IOS_FAILED || state == SEEKDB_IOS_STOPPED) {
+      auto state = seekdb_in_process_get_state();
+      if (state == SEEKDB_IN_PROCESS_FAILED || state == SEEKDB_IN_PROCESS_STOPPED) {
         stopped = true;
         break;
       }
-      if (state == SEEKDB_IOS_RUNNING && socket_ready(handle)) {
+      if (state == SEEKDB_IN_PROCESS_RUNNING && socket_ready(handle)) {
         ready = true;
         break;
       }

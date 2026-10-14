@@ -154,12 +154,12 @@ def main():
     if actual != expected:
         raise ValueError("Unexpected ABI exports: " + repr(actual ^ expected))
     markers = output("strings", str(binary))
-    if "SEEKDB_IOS_ARTIFACT_HOOK_MODE=disabled" not in markers or "SEEKDB_IOS_ARTIFACT_HOOK_MODE=enabled" in markers:
+    if "SEEKDB_IN_PROCESS_ARTIFACT_HOOK_MODE=disabled" not in markers or "SEEKDB_IN_PROCESS_ARTIFACT_HOOK_MODE=enabled" in markers:
         raise ValueError("Missing or conflicting disabled test hook marker")
     revision = output("git", "-C", str(source), "rev-parse", "HEAD").strip()
     if info.get("SeekDBSourceRevision") != revision[:12]:
         raise ValueError("Framework metadata does not match HEAD; reconfigure and rebuild")
-    if "SEEKDB_IOS_ARTIFACT_BUILD_ID=" + revision[:12] not in markers:
+    if "SEEKDB_IN_PROCESS_ARTIFACT_BUILD_ID=" + revision[:12] not in markers:
         raise ValueError("Framework binary does not match HEAD; reconfigure and rebuild")
     provenance = {
         "source_revision": revision,

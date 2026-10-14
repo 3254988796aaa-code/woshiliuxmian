@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "seekdb_ios.h"
+#include "seekdb_in_process.h"
 #include <atomic>
 #include <cstdlib>
 #include <fcntl.h>
@@ -33,11 +33,11 @@ using namespace oceanbase::observer;
 
 namespace {
 __attribute__((used)) const char artifact_metadata[] =
-    "SEEKDB_IOS_ARTIFACT_BUILD_ID=" SEEKDB_IOS_BUILD_ID
-    ";SEEKDB_IOS_ARTIFACT_HOOK_MODE=" SEEKDB_IOS_HOOK_MODE;
-std::atomic<seekdb_ios_state> runtime_state{SEEKDB_IOS_IDLE};
+    "SEEKDB_IN_PROCESS_ARTIFACT_BUILD_ID=" SEEKDB_IN_PROCESS_BUILD_ID
+    ";SEEKDB_IN_PROCESS_ARTIFACT_HOOK_MODE=" SEEKDB_IN_PROCESS_HOOK_MODE;
+std::atomic<seekdb_in_process_state> runtime_state{SEEKDB_IN_PROCESS_IDLE};
 std::atomic<bool> stop_requested{false};
-std::atomic<unsigned int> cleanup_status{SEEKDB_IOS_CLEANUP_NONE};
+std::atomic<unsigned int> cleanup_status{SEEKDB_IN_PROCESS_CLEANUP_NONE};
 std::atomic<int> cleanup_error{OB_SUCCESS};
 
 /** Preserve the first cleanup failure for diagnostics. */
@@ -49,9 +49,22 @@ void record_cleanup_error(int error)
   }
 }
 
-/** Create engine-owned directories and configure a bounded, socket-only server. */
+int add_parameters(ObServerOptions &options, const char *const *parameters)
+{
+  int ret = OB_SUCCESS;
+  for (size_t i = 0; OB_SUCC(ret) && parameters != nullptr && parameters[i] != nullptr; i += 2) {
+    if (parameters[i + 1] == nullptr) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ret = options.parameters_.push_back(std::make_pair(ObString(parameters[i]), ObString(parameters[i + 1])));
+    }
+  }
+  return ret;
+}
+
+/** Create engine-owned directories and pass the caller's server parameters. */
 int prepare_runtime(const char *directory, ObServerOptions &options,
-                    const char *const *caller_parameters)
+                    const char *const *startup_parameters, const char *const *initial_parameters)
 {
   int ret = options.base_dir_.assign(directory);
   if (OB_SUCC(ret)) {
@@ -67,14 +80,8 @@ int prepare_runtime(const char *directory, ObServerOptions &options,
   }
   options.in_process_ = true;
   options.nodaemon_ = true;
-  const char *parameters[][2] = {
-      {"mysql_port_mode", "disabled"}, {"sql_net_thread_count", "2"},
-      {"cpu_count", "2"}};
-  for (const auto &parameter : parameters) {
-    if (OB_SUCC(ret)) {
-      ret = options.parameters_.push_back(std::make_pair(
-          ObString(parameter[0]), ObString(parameter[1])));
-    }
+  if (OB_SUCC(ret)) {
+    ret = add_parameters(options, startup_parameters);
   }
   // Seed caller configuration only for an uninitialized data directory.
   bool first_init = true;
@@ -88,34 +95,8 @@ int prepare_runtime(const char *directory, ObServerOptions &options,
     }
     closedir(sstable);
   }
-  const char *defaults[][2] = {
-      {"memory_budget", "1G"}, {"vector_memory_limit", "128M"},
-      {"log_disk_size", "2G"}, {"datafile_maxsize", "20G"}};
-  if (first_init) {
-    for (const auto &parameter : defaults) {
-      const char *value = parameter[1];
-      for (size_t i = 0; caller_parameters != nullptr && caller_parameters[i] != nullptr; i += 2) {
-        if (std::strcmp(caller_parameters[i], parameter[0]) == 0) {
-          value = caller_parameters[i + 1];
-        }
-      }
-      if (OB_SUCC(ret)) {
-        ret = options.parameters_.push_back(std::make_pair(ObString(parameter[0]), ObString(value)));
-      }
-    }
-    for (size_t i = 0; caller_parameters != nullptr && caller_parameters[i] != nullptr; i += 2) {
-      const char *key = caller_parameters[i];
-      if (std::strcmp(key, "port") == 0 || std::strcmp(key, "memory_budget") == 0
-          || std::strcmp(key, "vector_memory_limit") == 0 || std::strcmp(key, "log_disk_size") == 0
-          || std::strcmp(key, "datafile_maxsize") == 0
-          || std::strcmp(key, "mysql_port_mode") == 0 || std::strcmp(key, "cpu_count") == 0
-          || std::strcmp(key, "sql_net_thread_count") == 0) {
-        continue;
-      }
-      if (OB_SUCC(ret)) {
-        ret = options.parameters_.push_back(std::make_pair(ObString(key), ObString(caller_parameters[i + 1])));
-      }
-    }
+  if (OB_SUCC(ret) && first_init) {
+    ret = add_parameters(options, initial_parameters);
   }
   return ret;
 }
@@ -129,7 +110,7 @@ int cleanup_server(ObServer &server, int primary_ret, bool server_initialized)
   const bool cleanup_succeeded = OB_SUCCESS == cleanup_ret
       || (!server_initialized && OB_NOT_INIT == cleanup_ret);
   if (cleanup_succeeded) {
-    cleanup_status.fetch_or(SEEKDB_IOS_CLEANUP_SERVER);
+    cleanup_status.fetch_or(SEEKDB_IN_PROCESS_CLEANUP_SERVER);
   } else {
     record_cleanup_error(cleanup_ret);
   }
@@ -154,11 +135,11 @@ int run_runtime(ObServerOptions &options)
     if (OB_FAIL(server.start())) {
     }
     if (OB_SUCC(ret)) {
-      runtime_state.store(SEEKDB_IOS_RUNNING);
+      runtime_state.store(SEEKDB_IN_PROCESS_RUNNING);
       while (!stop_requested.load()) {
         usleep(100000);
       }
-      runtime_state.store(SEEKDB_IOS_STOPPING);
+      runtime_state.store(SEEKDB_IN_PROCESS_STOPPING);
       server.prepare_stop();
     }
   }
@@ -168,30 +149,26 @@ int run_runtime(ObServerOptions &options)
 }
 } // namespace
 
-int seekdb_ios_run(const char *absolute_directory)
-{
-  return seekdb_ios_run_with_parameters(absolute_directory, nullptr);
-}
-
-int seekdb_ios_run_with_parameters(const char *absolute_directory, const char *const *parameters)
+int seekdb_in_process_run(const char *absolute_directory, const char *const *startup_parameters,
+                          const char *const *initial_parameters)
 {
   if (absolute_directory == nullptr || absolute_directory[0] != '/') {
     return OB_INVALID_ARGUMENT;
   }
-  seekdb_ios_state expected = SEEKDB_IOS_IDLE;
-  if (!runtime_state.compare_exchange_strong(expected, SEEKDB_IOS_STARTING)) {
+  seekdb_in_process_state expected = SEEKDB_IN_PROCESS_IDLE;
+  if (!runtime_state.compare_exchange_strong(expected, SEEKDB_IN_PROCESS_STARTING)) {
     return OB_INIT_TWICE;
   }
   int ret = OB_SUCCESS;
   bool curl_initialized = false;
-  cleanup_status.store(SEEKDB_IOS_CLEANUP_NONE);
+  cleanup_status.store(SEEKDB_IN_PROCESS_CLEANUP_NONE);
   cleanup_error.store(OB_SUCCESS);
   const int previous_directory = open(".", O_RDONLY);
   if (previous_directory < 0) {
     ret = OB_IO_ERROR;
   } else {
     ObServerOptions options;
-    if (OB_FAIL(prepare_runtime(absolute_directory, options, parameters))) {
+    if (OB_FAIL(prepare_runtime(absolute_directory, options, startup_parameters, initial_parameters))) {
     } else if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -200,7 +177,7 @@ int seekdb_ios_run_with_parameters(const char *absolute_directory, const char *c
     }
     if (curl_initialized) {
       curl_global_cleanup();
-      cleanup_status.fetch_or(SEEKDB_IOS_CLEANUP_CURL);
+      cleanup_status.fetch_or(SEEKDB_IN_PROCESS_CLEANUP_CURL);
     }
     if (fchdir(previous_directory) != 0) {
       record_cleanup_error(OB_IO_ERROR);
@@ -208,7 +185,7 @@ int seekdb_ios_run_with_parameters(const char *absolute_directory, const char *c
         ret = OB_IO_ERROR;
       }
     } else {
-      cleanup_status.fetch_or(SEEKDB_IOS_CLEANUP_WORKING_DIRECTORY);
+      cleanup_status.fetch_or(SEEKDB_IN_PROCESS_CLEANUP_WORKING_DIRECTORY);
     }
     if (close(previous_directory) != 0) {
       record_cleanup_error(OB_IO_ERROR);
@@ -217,36 +194,36 @@ int seekdb_ios_run_with_parameters(const char *absolute_directory, const char *c
       }
     }
   }
-  runtime_state.store(OB_SUCC(ret) ? SEEKDB_IOS_STOPPED : SEEKDB_IOS_FAILED);
+  runtime_state.store(OB_SUCC(ret) ? SEEKDB_IN_PROCESS_STOPPED : SEEKDB_IN_PROCESS_FAILED);
   return ret;
 }
 
-void seekdb_ios_request_stop(void)
+void seekdb_in_process_request_stop(void)
 {
   stop_requested.store(true);
 }
 
-seekdb_ios_state seekdb_ios_get_state(void)
+seekdb_in_process_state seekdb_in_process_get_state(void)
 {
   return runtime_state.load();
 }
 
-unsigned int seekdb_ios_get_cleanup_status(void)
+unsigned int seekdb_in_process_get_cleanup_status(void)
 {
   return cleanup_status.load();
 }
 
-int seekdb_ios_get_cleanup_error(void)
+int seekdb_in_process_get_cleanup_error(void)
 {
   return cleanup_error.load();
 }
 
-const char *seekdb_ios_get_build_id(void)
+const char *seekdb_in_process_get_build_id(void)
 {
-  return SEEKDB_IOS_BUILD_ID;
+  return SEEKDB_IN_PROCESS_BUILD_ID;
 }
 
-const char *seekdb_ios_get_hook_mode(void)
+const char *seekdb_in_process_get_hook_mode(void)
 {
-  return SEEKDB_IOS_HOOK_MODE;
+  return SEEKDB_IN_PROCESS_HOOK_MODE;
 }
