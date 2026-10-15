@@ -43,6 +43,14 @@ using namespace oceanbase::observer;
 namespace {
 __attribute__((used)) const char artifact_metadata[] =
     "SEEKDB_IN_PROCESS_ARTIFACT_BUILD_ID=" SEEKDB_IN_PROCESS_BUILD_ID;
+
+/** Engine states for the single-run-per-process in-process host. */
+enum seekdb_in_process_state {
+  SEEKDB_IN_PROCESS_IDLE = 0,
+  SEEKDB_IN_PROCESS_STARTING = 1,
+  SEEKDB_IN_PROCESS_RUNNING = 2,
+  SEEKDB_IN_PROCESS_FAILED = 3
+};
 std::atomic<seekdb_in_process_state> runtime_state{SEEKDB_IN_PROCESS_IDLE};
 
 /** Own one engine thread and the arguments retained for its entire lifetime. */
@@ -329,14 +337,4 @@ const char *seekdb_in_process_get_socket_path(void)
 const char *seekdb_in_process_get_start_error(void)
 {
   return start_error.c_str();
-}
-
-seekdb_in_process_state seekdb_in_process_get_state(void)
-{
-  return runtime_state.load();
-}
-
-const char *seekdb_in_process_get_build_id(void)
-{
-  return SEEKDB_IN_PROCESS_BUILD_ID;
 }

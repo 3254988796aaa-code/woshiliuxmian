@@ -18,26 +18,12 @@
 extern "C" {
 #endif
 
-/** Engine states for the single-run-per-process in-process host. */
-enum seekdb_in_process_state {
-  SEEKDB_IN_PROCESS_IDLE = 0,
-  SEEKDB_IN_PROCESS_STARTING = 1,
-  SEEKDB_IN_PROCESS_RUNNING = 2,
-  SEEKDB_IN_PROCESS_FAILED = 3
-};
-
 int seekdb_in_process_start(const char *absolute_directory, const char *const *startup_parameters,
                             const char *const *initial_parameters);
 
 const char *seekdb_in_process_get_socket_path(void);
 
 const char *seekdb_in_process_get_start_error(void);
-
-/** Return the current lifecycle state without blocking. */
-enum seekdb_in_process_state seekdb_in_process_get_state(void);
-
-/** Return the source revision compiled into the runtime. */
-const char *seekdb_in_process_get_build_id(void);
 
 #ifdef __cplusplus
 }
