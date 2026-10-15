@@ -64,7 +64,7 @@ struct Engine {
   std::atomic<int> result{OB_SUCCESS};
 };
 Engine engine;
-thread_local std::string last_error;
+thread_local std::string start_error;
 
 /** Preserve the first cleanup failure for diagnostics. */
 void record_cleanup_error(int error)
@@ -89,8 +89,8 @@ int add_parameters(ObServerOptions &options, const char *const *parameters)
 }
 
 /** Create engine-owned directories and pass the caller's server parameters. */
-int prepare_runtime(const char *directory, ObServerOptions &options,
-                    const char *const *startup_parameters, const char *const *initial_parameters)
+int prepare_server(const char *directory, ObServerOptions &options,
+                   const char *const *startup_parameters, const char *const *initial_parameters)
 {
   int ret = options.base_dir_.assign(directory);
   if (OB_SUCC(ret)) {
@@ -144,7 +144,7 @@ int cleanup_server(ObServer &server, int primary_ret, bool server_initialized)
 }
 
 /** Start and stop the singleton without taking ownership of process signals. */
-int run_runtime(ObServerOptions &options)
+int run_server(ObServerOptions &options)
 {
   int ret = OB_SUCCESS;
   lib::ObStackHeaderGuard stack_header_guard;
@@ -174,8 +174,8 @@ int run_runtime(ObServerOptions &options)
   return ret;
 }
 
-int run(const char *absolute_directory, const char *const *startup_parameters,
-        const char *const *initial_parameters)
+int run_engine(const char *absolute_directory, const char *const *startup_parameters,
+               const char *const *initial_parameters)
 {
   runtime_state.store(SEEKDB_IN_PROCESS_STARTING);
   int ret = OB_SUCCESS;
@@ -187,12 +187,12 @@ int run(const char *absolute_directory, const char *const *startup_parameters,
     ret = OB_IO_ERROR;
   } else {
     ObServerOptions options;
-    if (OB_FAIL(prepare_runtime(absolute_directory, options, startup_parameters, initial_parameters))) {
+    if (OB_FAIL(prepare_server(absolute_directory, options, startup_parameters, initial_parameters))) {
     } else if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       curl_initialized = true;
-      ret = run_runtime(options);
+      ret = run_server(options);
     }
     if (curl_initialized) {
       curl_global_cleanup();
@@ -218,15 +218,15 @@ int run(const char *absolute_directory, const char *const *startup_parameters,
 }
 
 /** Run the in-process engine; the caller joins before releasing its arguments. */
-void *run_engine(void *)
+void *engine_thread(void *)
 {
-  engine.result.store(run(engine.directory.c_str(), engine.startup.data(), engine.initial.data()));
+  engine.result.store(run_engine(engine.directory.c_str(), engine.startup.data(), engine.initial.data()));
   return nullptr;
 }
 
 int start_failed(int code, const char *message)
 {
-  last_error = message;
+  start_error = message;
   return code;
 }
 
@@ -329,7 +329,7 @@ int stop_engine()
 int seekdb_in_process_start(const char *absolute_directory, const char *const *startup_parameters,
                             const char *const *initial_parameters)
 {
-  last_error.clear();
+  start_error.clear();
   if (absolute_directory == nullptr || absolute_directory[0] != '/') {
     return start_failed(OB_INVALID_ARGUMENT, "the directory must be an absolute path");
   }
@@ -360,7 +360,7 @@ int seekdb_in_process_start(const char *absolute_directory, const char *const *s
     if (thread_error == 0) {
       thread_error = pthread_attr_setstacksize(&attributes, 8 * 1024 * 1024);
       if (thread_error == 0) {
-        thread_error = pthread_create(&engine.thread, &attributes, run_engine, nullptr);
+        thread_error = pthread_create(&engine.thread, &attributes, engine_thread, nullptr);
       }
       pthread_attr_destroy(&attributes);
     }
@@ -412,15 +412,15 @@ int seekdb_in_process_stop(void)
   return ret;
 }
 
-const char *seekdb_in_process_socket_path(void)
+const char *seekdb_in_process_get_socket_path(void)
 {
   std::lock_guard<std::mutex> guard(engine.mutex);
   return engine.starts > 0 ? engine.socket_path.c_str() : nullptr;
 }
 
-const char *seekdb_in_process_last_error(void)
+const char *seekdb_in_process_get_start_error(void)
 {
-  return last_error.c_str();
+  return start_error.c_str();
 }
 
 seekdb_in_process_state seekdb_in_process_get_state(void)

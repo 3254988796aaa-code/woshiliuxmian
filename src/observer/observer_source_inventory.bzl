@@ -408,8 +408,8 @@ OBSERVER_STANDALONE_SOURCES = [
 ]
 
 OBSERVER_IGNORED_SOURCES = [
+    "in_process/seekdb.cpp",
     "in_process/seekdb_in_process.cpp",
-    "in_process/seekdb_lifecycle.cpp",
     "ios/seekdb_platform.cpp",
     "report/ob_tablet_meta_checker.cpp",
     "vector_index/ob_vector_index_async_task_scheduler.cpp",

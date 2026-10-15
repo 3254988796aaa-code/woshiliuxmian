@@ -61,7 +61,7 @@ const char *invalid_parameters(const char **parameters)
   return nullptr;
 }
 
-void append(std::vector<std::string> &values, const char *const *parameters)
+void append_parameters(std::vector<std::string> &values, const char *const *parameters)
 {
   for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; ++i) {
     values.emplace_back(parameters[i]);
@@ -80,14 +80,14 @@ bool has_key(const std::vector<std::string> &parameters, const char *key)
 std::vector<std::string> startup_parameters()
 {
   std::vector<std::string> result = {"mysql_port_mode", "disabled"};
-  append(result, seekdb_platform::startup_parameters());
+  append_parameters(result, seekdb_platform::extra_startup_parameters());
   return result;
 }
 
 std::vector<std::string> initial_parameters(const char **parameters, const std::vector<std::string> &startup)
 {
   std::vector<std::string> result = {"memory_budget", "1G", "log_disk_size", "2G"};
-  append(result, seekdb_platform::initial_defaults());
+  append_parameters(result, seekdb_platform::extra_initial_defaults());
   const size_t defaults = result.size();
   for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
     bool overridden = false;
@@ -105,7 +105,7 @@ std::vector<std::string> initial_parameters(const char **parameters, const std::
   return result;
 }
 
-std::vector<const char *> pointers(const std::vector<std::string> &values)
+std::vector<const char *> parameter_pointers(const std::vector<std::string> &values)
 {
   std::vector<const char *> result;
   for (const auto &value : values) {
@@ -182,15 +182,15 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
   }
   std::vector<std::string> startup = startup_parameters();
   std::vector<std::string> initial = initial_parameters(parameters, startup);
-  std::vector<const char *> startup_pointers = pointers(startup);
-  std::vector<const char *> initial_pointers = pointers(initial);
+  std::vector<const char *> startup_pointers = parameter_pointers(startup);
+  std::vector<const char *> initial_pointers = parameter_pointers(initial);
   int ret = seekdb_in_process_start(directory, startup_pointers.data(), initial_pointers.data());
   if (ret != oceanbase::common::OB_SUCCESS) {
     destroy_handle(handle);
     return open_failed(ret == oceanbase::common::OB_INVALID_ARGUMENT ? SEEKDB_INVALID_ARGUMENT : SEEKDB_INTERNAL_ERROR,
-                       seekdb_in_process_last_error());
+                       seekdb_in_process_get_start_error());
   }
-  if (!prepare_socket(handle, seekdb_in_process_socket_path())) {
+  if (!prepare_socket(handle, seekdb_in_process_get_socket_path())) {
     seekdb_in_process_stop();
     destroy_handle(handle);
     return open_failed(SEEKDB_INTERNAL_ERROR, "cannot prepare the Unix socket path");

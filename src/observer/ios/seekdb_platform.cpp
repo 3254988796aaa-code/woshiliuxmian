@@ -31,13 +31,13 @@ __attribute__((constructor)) static void initialize_framework_allocator()
 }
 
 namespace seekdb_platform {
-const char *const *startup_parameters()
+const char *const *extra_startup_parameters()
 {
   static const char *const parameters[] = {"sql_net_thread_count", "2", "cpu_count", "2", nullptr};
   return parameters;
 }
 
-const char *const *initial_defaults()
+const char *const *extra_initial_defaults()
 {
   static const char *const parameters[] = {"vector_memory_limit", "128M", "datafile_maxsize", "20G", nullptr};
   return parameters;

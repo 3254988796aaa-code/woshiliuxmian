@@ -193,7 +193,7 @@ if(NOT WIN32)
     set(SEEKDB_IN_PROCESS_BUILD_ID "unknown")
   endif()
   add_library(seekdb_in_process OBJECT EXCLUDE_FROM_ALL
-    in_process/seekdb_in_process.cpp in_process/seekdb_lifecycle.cpp)
+    in_process/seekdb.cpp in_process/seekdb_in_process.cpp)
   target_include_directories(seekdb_in_process PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/in_process")
   target_compile_definitions(seekdb_in_process PRIVATE
     SEEKDB_IN_PROCESS_BUILD_ID="${SEEKDB_IN_PROCESS_BUILD_ID}")

@@ -20,7 +20,7 @@
 #include <vector>
 
 namespace seekdb_platform {
-const char *const *startup_parameters();
-const char *const *initial_defaults();
+const char *const *extra_startup_parameters();
+const char *const *extra_initial_defaults();
 std::vector<std::string> socket_alias_patterns();
 }

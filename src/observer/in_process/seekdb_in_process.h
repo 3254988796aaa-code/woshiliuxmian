@@ -41,9 +41,9 @@ int seekdb_in_process_start(const char *absolute_directory, const char *const *s
 
 int seekdb_in_process_stop(void);
 
-const char *seekdb_in_process_socket_path(void);
+const char *seekdb_in_process_get_socket_path(void);
 
-const char *seekdb_in_process_last_error(void);
+const char *seekdb_in_process_get_start_error(void);
 
 /** Return the current lifecycle state without blocking. */
 enum seekdb_in_process_state seekdb_in_process_get_state(void);
@@ -54,7 +54,7 @@ unsigned int seekdb_in_process_get_cleanup_status(void);
 /** Return the first cleanup error without replacing the primary runtime error. */
 int seekdb_in_process_get_cleanup_error(void);
 
-/** Return the source revision compiled into the linked runtime archive. */
+/** Return the source revision compiled into the runtime. */
 const char *seekdb_in_process_get_build_id(void);
 
 #ifdef __cplusplus
