@@ -17,7 +17,6 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#include <fcntl.h>
 #include <dirent.h>
 #include <cstring>
 #include <limits.h>
@@ -45,16 +44,11 @@ namespace {
 __attribute__((used)) const char artifact_metadata[] =
     "SEEKDB_IN_PROCESS_ARTIFACT_BUILD_ID=" SEEKDB_IN_PROCESS_BUILD_ID;
 std::atomic<seekdb_in_process_state> runtime_state{SEEKDB_IN_PROCESS_IDLE};
-std::atomic<bool> stop_requested{false};
-std::atomic<unsigned int> cleanup_status{SEEKDB_IN_PROCESS_CLEANUP_NONE};
-std::atomic<int> cleanup_error{OB_SUCCESS};
 
 /** Own one engine thread and the arguments retained for its entire lifetime. */
 struct Engine {
   std::mutex mutex;
-  pthread_t thread{};
   bool started = false;
-  size_t starts = 0;
   std::string directory;
   std::string socket_path;
   std::vector<std::string> startup_storage;
@@ -65,15 +59,6 @@ struct Engine {
 };
 Engine engine;
 thread_local std::string start_error;
-
-/** Preserve the first cleanup failure for diagnostics. */
-void record_cleanup_error(int error)
-{
-  int expected = OB_SUCCESS;
-  if (OB_SUCCESS != error) {
-    cleanup_error.compare_exchange_strong(expected, error);
-  }
-}
 
 int add_parameters(ObServerOptions &options, const char *const *parameters)
 {
@@ -127,23 +112,7 @@ int prepare_server(const char *directory, ObServerOptions &options,
   return ret;
 }
 
-/** Stop and destroy an in-process server while preserving its primary error. */
-int cleanup_server(ObServer &server, int primary_ret, bool server_initialized)
-{
-  server.set_stop();
-  const int cleanup_ret = server.wait();
-  server.destroy();
-  const bool cleanup_succeeded = OB_SUCCESS == cleanup_ret
-      || (!server_initialized && OB_NOT_INIT == cleanup_ret);
-  if (cleanup_succeeded) {
-    cleanup_status.fetch_or(SEEKDB_IN_PROCESS_CLEANUP_SERVER);
-  } else {
-    record_cleanup_error(cleanup_ret);
-  }
-  return primary_ret == OB_SUCCESS ? cleanup_ret : primary_ret;
-}
-
-/** Start and stop the singleton without taking ownership of process signals. */
+/** Start the singleton without taking ownership of process signals. */
 int run_server(ObServerOptions &options)
 {
   int ret = OB_SUCCESS;
@@ -154,22 +123,14 @@ int run_server(ObServerOptions &options)
   OB_LOGGER.set_file_name("log/seekdb.log", true, false);
   ObPLogWriterCfg log_config;
   ObServer &server = ObServer::get_instance();
-  bool server_initialized = false;
   if (OB_FAIL(server.init(options, log_config))) {
+  } else if (OB_FAIL(server.start())) {
   } else {
-    server_initialized = true;
-    if (OB_FAIL(server.start())) {
-    }
-    if (OB_SUCC(ret)) {
-      runtime_state.store(SEEKDB_IN_PROCESS_RUNNING);
-      while (!stop_requested.load()) {
-        usleep(100000);
-      }
-      runtime_state.store(SEEKDB_IN_PROCESS_STOPPING);
-      server.prepare_stop();
+    runtime_state.store(SEEKDB_IN_PROCESS_RUNNING);
+    while (true) {
+      pause();
     }
   }
-  ret = cleanup_server(server, ret, server_initialized);
   lib::Worker::set_worker_to_thread_local(nullptr);
   return ret;
 }
@@ -179,48 +140,21 @@ int run_engine(const char *absolute_directory, const char *const *startup_parame
 {
   runtime_state.store(SEEKDB_IN_PROCESS_STARTING);
   int ret = OB_SUCCESS;
-  bool curl_initialized = false;
-  cleanup_status.store(SEEKDB_IN_PROCESS_CLEANUP_NONE);
-  cleanup_error.store(OB_SUCCESS);
-  const int previous_directory = open(".", O_RDONLY);
-  if (previous_directory < 0) {
-    ret = OB_IO_ERROR;
+  ObServerOptions options;
+  if (OB_FAIL(prepare_server(absolute_directory, options, startup_parameters, initial_parameters))) {
+  } else if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
+    ret = OB_ERR_UNEXPECTED;
   } else {
-    ObServerOptions options;
-    if (OB_FAIL(prepare_server(absolute_directory, options, startup_parameters, initial_parameters))) {
-    } else if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      curl_initialized = true;
-      ret = run_server(options);
-    }
-    if (curl_initialized) {
-      curl_global_cleanup();
-      cleanup_status.fetch_or(SEEKDB_IN_PROCESS_CLEANUP_CURL);
-    }
-    if (fchdir(previous_directory) != 0) {
-      record_cleanup_error(OB_IO_ERROR);
-      if (OB_SUCC(ret)) {
-        ret = OB_IO_ERROR;
-      }
-    } else {
-      cleanup_status.fetch_or(SEEKDB_IN_PROCESS_CLEANUP_WORKING_DIRECTORY);
-    }
-    if (close(previous_directory) != 0) {
-      record_cleanup_error(OB_IO_ERROR);
-      if (OB_SUCC(ret)) {
-        ret = OB_IO_ERROR;
-      }
-    }
+    ret = run_server(options);
   }
-  runtime_state.store(OB_SUCC(ret) ? SEEKDB_IN_PROCESS_STOPPED : SEEKDB_IN_PROCESS_FAILED);
   return ret;
 }
 
-/** Run the in-process engine; the caller joins before releasing its arguments. */
+/** Run the in-process engine; it only returns when startup fails. */
 void *engine_thread(void *)
 {
   engine.result.store(run_engine(engine.directory.c_str(), engine.startup.data(), engine.initial.data()));
+  runtime_state.store(SEEKDB_IN_PROCESS_FAILED);
   return nullptr;
 }
 
@@ -314,16 +248,6 @@ bool socket_ready()
   }
   return ready;
 }
-
-/** Stop and join the consumed engine thread before returning to the caller. */
-int stop_engine()
-{
-  stop_requested.store(true);
-  if (pthread_join(engine.thread, nullptr) != 0) {
-    return OB_ERR_SYS;
-  }
-  return engine.result.load();
-}
 } // namespace
 
 int seekdb_in_process_start(const char *absolute_directory, const char *const *startup_parameters,
@@ -338,15 +262,12 @@ int seekdb_in_process_start(const char *absolute_directory, const char *const *s
   if (canonical.empty()) {
     return start_failed(OB_INVALID_ARGUMENT, "cannot resolve the directory");
   }
-  if (engine.started && engine.starts == 0) {
-    return start_failed(OB_INIT_TWICE,
-                        "the engine already stopped in this process; start a new process to open a database again");
-  }
   if (engine.started && engine.directory != canonical) {
     return start_failed(OB_STATE_NOT_MATCH, "another directory is already open in this process");
   }
   if (engine.started && runtime_state.load() != SEEKDB_IN_PROCESS_RUNNING) {
-    return start_failed(OB_STATE_NOT_MATCH, "the engine is no longer running");
+    return start_failed(OB_STATE_NOT_MATCH,
+                        "the engine is not running in this process; start a new process to open a database again");
   }
   if (!engine.started) {
     engine.directory = canonical;
@@ -355,12 +276,16 @@ int seekdb_in_process_start(const char *absolute_directory, const char *const *s
     engine.initial_storage = copy_parameters(initial_parameters);
     engine.startup = parameter_pointers(engine.startup_storage);
     engine.initial = parameter_pointers(engine.initial_storage);
+    pthread_t thread;
     pthread_attr_t attributes;
     int thread_error = pthread_attr_init(&attributes);
     if (thread_error == 0) {
       thread_error = pthread_attr_setstacksize(&attributes, 8 * 1024 * 1024);
       if (thread_error == 0) {
-        thread_error = pthread_create(&engine.thread, &attributes, engine_thread, nullptr);
+        thread_error = pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED);
+      }
+      if (thread_error == 0) {
+        thread_error = pthread_create(&thread, &attributes, engine_thread, nullptr);
       }
       pthread_attr_destroy(&attributes);
     }
@@ -369,11 +294,11 @@ int seekdb_in_process_start(const char *absolute_directory, const char *const *s
     }
     engine.started = true;
     bool ready = false;
-    bool stopped = false;
+    bool failed = false;
     for (unsigned int attempt = 0; attempt < 1500; ++attempt) {
       auto state = runtime_state.load();
-      if (state == SEEKDB_IN_PROCESS_FAILED || state == SEEKDB_IN_PROCESS_STOPPED) {
-        stopped = true;
+      if (state == SEEKDB_IN_PROCESS_FAILED) {
+        failed = true;
         break;
       }
       if (state == SEEKDB_IN_PROCESS_RUNNING && socket_ready()) {
@@ -382,40 +307,23 @@ int seekdb_in_process_start(const char *absolute_directory, const char *const *s
       }
       usleep(200000);
     }
-    if (!ready && !stopped) {
-      stop_requested.store(true);
-      pthread_detach(engine.thread);
-      return start_failed(OB_TIMEOUT, "the engine did not accept SQL connections within 300 seconds; "
-                                      "see the log directory under the database directory");
-    }
-    if (!ready) {
-      const int ret = stop_engine();
+    if (failed) {
+      const int ret = engine.result.load();
       return start_failed(OB_SUCCESS == ret ? OB_ERR_UNEXPECTED : ret,
                           "the engine stopped during startup; see the log directory under the database directory");
     }
+    if (!ready) {
+      return start_failed(OB_TIMEOUT, "the engine did not accept SQL connections within 300 seconds; "
+                                      "see the log directory under the database directory");
+    }
   }
-  ++engine.starts;
   return OB_SUCCESS;
-}
-
-int seekdb_in_process_stop(void)
-{
-  std::lock_guard<std::mutex> guard(engine.mutex);
-  if (engine.starts == 0) {
-    return OB_NOT_INIT;
-  }
-  int ret = OB_SUCCESS;
-  if (--engine.starts == 0) {
-    ret = stop_engine();
-    engine.socket_path.clear();
-  }
-  return ret;
 }
 
 const char *seekdb_in_process_get_socket_path(void)
 {
   std::lock_guard<std::mutex> guard(engine.mutex);
-  return engine.starts > 0 ? engine.socket_path.c_str() : nullptr;
+  return runtime_state.load() == SEEKDB_IN_PROCESS_RUNNING ? engine.socket_path.c_str() : nullptr;
 }
 
 const char *seekdb_in_process_get_start_error(void)
@@ -426,16 +334,6 @@ const char *seekdb_in_process_get_start_error(void)
 seekdb_in_process_state seekdb_in_process_get_state(void)
 {
   return runtime_state.load();
-}
-
-unsigned int seekdb_in_process_get_cleanup_status(void)
-{
-  return cleanup_status.load();
-}
-
-int seekdb_in_process_get_cleanup_error(void)
-{
-  return cleanup_error.load();
 }
 
 const char *seekdb_in_process_get_build_id(void)

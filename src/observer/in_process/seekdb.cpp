@@ -191,7 +191,6 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
                        seekdb_in_process_get_start_error());
   }
   if (!prepare_socket(handle, seekdb_in_process_get_socket_path())) {
-    seekdb_in_process_stop();
     destroy_handle(handle);
     return open_failed(SEEKDB_INTERNAL_ERROR, "cannot prepare the Unix socket path");
   }
@@ -220,10 +219,10 @@ const char *seekdb_last_open_error(void)
   return last_open_error.c_str();
 }
 
-/** Release this handle; the last handle stops and joins the one-shot engine. */
+/** Release this handle; the engine keeps running until the process exits. */
 int seekdb_close(SeekdbHandle opaque)
 {
-  if (opaque == nullptr || seekdb_in_process_stop() == oceanbase::common::OB_NOT_INIT) {
+  if (opaque == nullptr) {
     return SEEKDB_INVALID_ARGUMENT;
   }
   destroy_handle(static_cast<SeekdbHandleImpl *>(opaque));

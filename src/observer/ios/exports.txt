@@ -1,8 +1,6 @@
 _seekdb_close
 _seekdb_connection_options
 _seekdb_in_process_get_build_id
-_seekdb_in_process_get_cleanup_error
-_seekdb_in_process_get_cleanup_status
 _seekdb_in_process_get_state
 _seekdb_last_open_error
 _seekdb_open
