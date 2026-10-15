@@ -192,14 +192,12 @@ if(NOT WIN32)
     endif()
     set(SEEKDB_IN_PROCESS_BUILD_ID "unknown")
   endif()
-  add_library(seekdb_in_process_runtime STATIC EXCLUDE_FROM_ALL in_process/seekdb_in_process.cpp)
-  target_include_directories(seekdb_in_process_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/in_process")
-  target_compile_definitions(seekdb_in_process_runtime PRIVATE
-    SEEKDB_IN_PROCESS_BUILD_ID="${SEEKDB_IN_PROCESS_BUILD_ID}"
-    SEEKDB_IN_PROCESS_HOOK_MODE="disabled")
-  target_link_libraries(seekdb_in_process_runtime PUBLIC oceanbase_static sql_nio)
-  add_library(seekdb_in_process_lifecycle OBJECT EXCLUDE_FROM_ALL in_process/seekdb_lifecycle.cpp)
-  target_link_libraries(seekdb_in_process_lifecycle PUBLIC seekdb_in_process_runtime)
+  add_library(seekdb_in_process OBJECT EXCLUDE_FROM_ALL
+    in_process/seekdb_in_process.cpp in_process/seekdb_lifecycle.cpp)
+  target_include_directories(seekdb_in_process PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/in_process")
+  target_compile_definitions(seekdb_in_process PRIVATE
+    SEEKDB_IN_PROCESS_BUILD_ID="${SEEKDB_IN_PROCESS_BUILD_ID}")
+  target_link_libraries(seekdb_in_process PUBLIC oceanbase_static sql_nio)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")

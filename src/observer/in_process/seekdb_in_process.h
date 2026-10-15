@@ -57,9 +57,6 @@ int seekdb_in_process_get_cleanup_error(void);
 /** Return the source revision compiled into the linked runtime archive. */
 const char *seekdb_in_process_get_build_id(void);
 
-/** Return whether deterministic test hooks were compiled into the runtime. */
-const char *seekdb_in_process_get_hook_mode(void);
-
 #ifdef __cplusplus
 }
 #endif

@@ -21,8 +21,6 @@
 
 namespace seekdb_platform {
 const char *const *startup_parameters();
-std::vector<std::string> initial_parameters(const char **parameters);
-const char *invalid_parameters(const char **parameters);
+const char *const *initial_defaults();
 std::vector<std::string> socket_alias_patterns();
-const char *stopped_message();
 }

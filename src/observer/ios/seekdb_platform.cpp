@@ -15,9 +15,7 @@
  */
 
 #include "seekdb_platform.h"
-#include <cerrno>
 #include <cstdlib>
-#include <cstring>
 #include <TargetConditionals.h>
 #include <jemalloc/jemalloc.h>
 
@@ -35,58 +33,14 @@ __attribute__((constructor)) static void initialize_framework_allocator()
 namespace seekdb_platform {
 const char *const *startup_parameters()
 {
-  static const char *const parameters[] = {
-      "mysql_port_mode", "disabled", "sql_net_thread_count", "2", "cpu_count", "2", nullptr};
+  static const char *const parameters[] = {"sql_net_thread_count", "2", "cpu_count", "2", nullptr};
   return parameters;
 }
 
-std::vector<std::string> initial_parameters(const char **parameters)
+const char *const *initial_defaults()
 {
-  const char *defaults[][2] = {
-      {"memory_budget", "1G"}, {"vector_memory_limit", "128M"},
-      {"log_disk_size", "2G"}, {"datafile_maxsize", "20G"}};
-  std::vector<std::string> result;
-  for (const auto &parameter : defaults) {
-    const char *value = parameter[1];
-    for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
-      if (std::strcmp(parameters[i], parameter[0]) == 0) {
-        value = parameters[i + 1];
-      }
-    }
-    result.emplace_back(parameter[0]);
-    result.emplace_back(value);
-  }
-  for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
-    bool reserved = false;
-    for (const char *key : {"port", "mysql_port_mode", "cpu_count", "sql_net_thread_count",
-                            "memory_budget", "vector_memory_limit", "log_disk_size", "datafile_maxsize"}) {
-      reserved = reserved || std::strcmp(parameters[i], key) == 0;
-    }
-    if (!reserved) {
-      result.emplace_back(parameters[i]);
-      result.emplace_back(parameters[i + 1]);
-    }
-  }
-  return result;
-}
-
-const char *invalid_parameters(const char **parameters)
-{
-  for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
-    if (std::strcmp(parameters[i], "port") == 0) {
-      char *end = nullptr;
-      errno = 0;
-      long port = std::strtol(parameters[i + 1], &end, 10);
-      if (errno != 0 || parameters[i + 1][0] == '\0' || *end != '\0' || port != 0) {
-        return "TCP is not available on iOS; port must be 0";
-      }
-    }
-    if (std::strcmp(parameters[i], "mysql_port_mode") == 0
-        && std::strcmp(parameters[i + 1], "disabled") != 0) {
-      return "TCP is not available on iOS; mysql_port_mode must be disabled";
-    }
-  }
-  return nullptr;
+  static const char *const parameters[] = {"vector_memory_limit", "128M", "datafile_maxsize", "20G", nullptr};
+  return parameters;
 }
 
 /** Shorten long socket names inside the App home; simulator may use host /tmp. */
@@ -106,10 +60,5 @@ std::vector<std::string> socket_alias_patterns()
   patterns.push_back("/tmp/seekdb-XXXXXX");
 #endif
   return patterns;
-}
-
-const char *stopped_message()
-{
-  return "the engine already stopped in this process; restart the App to open a database again";
 }
 }

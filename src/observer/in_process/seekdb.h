@@ -43,15 +43,16 @@ typedef struct {
 /* Open a seekdb instance rooted at db_dir.
  *
  * parameters is an optional NULL-terminated array of key/value pairs:
- *   {"port", "3306", "memory_budget", "10G", "syslog_max_file", "1000", NULL}
+ *   {"memory_budget", "10G", "syslog_max_file", "1000", NULL}
  *
- * Driver-reserved keys (consumed by libseekdb, not forwarded to the server):
- *   port — TCP port for connect; omit or "0" for local transport (UDS/pipe).
+ * Driver-reserved keys (not forwarded as server parameters):
+ *   port — omit or "0"; the in-process engine has no TCP listener.
+ *   mysql_port_mode — omit or "disabled".
  *
- * All other keys are seekdb server parameters, passed as --parameter on first
- * init only. On first init the driver always seeds memory_budget=1G and
- * log_disk_size=2G unless the caller overrides them; additional server keys
- * may also be supplied. On restart, persisted values are kept (issue #26). */
+ * All other keys are seekdb server parameters, passed on first init only. On
+ * first init the driver always seeds memory_budget=1G and log_disk_size=2G
+ * unless the caller overrides them; a platform may seed more defaults and fix
+ * more parameters on every start. On restart, persisted values are kept (issue #26). */
 int seekdb_open(const char *db_dir, const char **parameters, SeekdbHandle *out_handle);
 /* Description of the most recent seekdb_open failure on the calling thread.
  * Empty before the first open and after a successful open. The borrowed string
@@ -67,9 +68,9 @@ int seekdb_close(SeekdbHandle handle);
  * transport is "tcp", "unix_socket", or "named_pipe". TCP returns host and
  * port; local transports return their corresponding named field. Unused
  * transport fields are NULL and port is zero for local transports. user is
- * always "root". On iOS, transport is always "unix_socket"; a long socket path
- * is replaced by a per-handle short alias under the App's tmp directory, or
- * under /tmp on the Simulator.
+ * always "root". The in-process engine always uses "unix_socket"; a long socket
+ * path is replaced by a per-handle short alias in a platform directory (on iOS
+ * the App's tmp directory, or /tmp on the Simulator).
  * Returned strings are borrowed and remain valid until seekdb_close(handle). */
 int seekdb_connection_options(SeekdbHandle handle, SeekdbConnectionOptions *out_options);
 

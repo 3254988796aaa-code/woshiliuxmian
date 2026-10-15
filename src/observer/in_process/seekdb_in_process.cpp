@@ -43,8 +43,7 @@ using namespace oceanbase::observer;
 
 namespace {
 __attribute__((used)) const char artifact_metadata[] =
-    "SEEKDB_IN_PROCESS_ARTIFACT_BUILD_ID=" SEEKDB_IN_PROCESS_BUILD_ID
-    ";SEEKDB_IN_PROCESS_ARTIFACT_HOOK_MODE=" SEEKDB_IN_PROCESS_HOOK_MODE;
+    "SEEKDB_IN_PROCESS_ARTIFACT_BUILD_ID=" SEEKDB_IN_PROCESS_BUILD_ID;
 std::atomic<seekdb_in_process_state> runtime_state{SEEKDB_IN_PROCESS_IDLE};
 std::atomic<bool> stop_requested{false};
 std::atomic<unsigned int> cleanup_status{SEEKDB_IN_PROCESS_CLEANUP_NONE};
@@ -178,13 +177,7 @@ int run_runtime(ObServerOptions &options)
 int run(const char *absolute_directory, const char *const *startup_parameters,
         const char *const *initial_parameters)
 {
-  if (absolute_directory == nullptr || absolute_directory[0] != '/') {
-    return OB_INVALID_ARGUMENT;
-  }
-  seekdb_in_process_state expected = SEEKDB_IN_PROCESS_IDLE;
-  if (!runtime_state.compare_exchange_strong(expected, SEEKDB_IN_PROCESS_STARTING)) {
-    return OB_INIT_TWICE;
-  }
+  runtime_state.store(SEEKDB_IN_PROCESS_STARTING);
   int ret = OB_SUCCESS;
   bool curl_initialized = false;
   cleanup_status.store(SEEKDB_IN_PROCESS_CLEANUP_NONE);
@@ -266,16 +259,6 @@ std::string canonical_directory(const char *directory)
   return result;
 }
 
-bool valid_parameters(const char *const *parameters)
-{
-  for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
-    if (parameters[i][0] == '\0' || parameters[i + 1] == nullptr) {
-      return false;
-    }
-  }
-  return true;
-}
-
 std::vector<std::string> copy_parameters(const char *const *parameters)
 {
   std::vector<std::string> values;
@@ -350,9 +333,6 @@ int seekdb_in_process_start(const char *absolute_directory, const char *const *s
   if (absolute_directory == nullptr || absolute_directory[0] != '/') {
     return start_failed(OB_INVALID_ARGUMENT, "the directory must be an absolute path");
   }
-  if (!valid_parameters(startup_parameters) || !valid_parameters(initial_parameters)) {
-    return start_failed(OB_INVALID_ARGUMENT, "parameters must be key/value pairs with non-empty keys");
-  }
   std::lock_guard<std::mutex> guard(engine.mutex);
   std::string canonical = canonical_directory(absolute_directory);
   if (canonical.empty()) {
@@ -402,12 +382,14 @@ int seekdb_in_process_start(const char *absolute_directory, const char *const *s
       }
       usleep(200000);
     }
+    if (!ready && !stopped) {
+      stop_requested.store(true);
+      pthread_detach(engine.thread);
+      return start_failed(OB_TIMEOUT, "the engine did not accept SQL connections within 300 seconds; "
+                                      "see the log directory under the database directory");
+    }
     if (!ready) {
       const int ret = stop_engine();
-      if (!stopped) {
-        return start_failed(OB_TIMEOUT, "the engine did not accept SQL connections within 300 seconds; "
-                                        "see the log directory under the database directory");
-      }
       return start_failed(OB_SUCCESS == ret ? OB_ERR_UNEXPECTED : ret,
                           "the engine stopped during startup; see the log directory under the database directory");
     }
@@ -459,9 +441,4 @@ int seekdb_in_process_get_cleanup_error(void)
 const char *seekdb_in_process_get_build_id(void)
 {
   return SEEKDB_IN_PROCESS_BUILD_ID;
-}
-
-const char *seekdb_in_process_get_hook_mode(void)
-{
-  return SEEKDB_IN_PROCESS_HOOK_MODE;
 }

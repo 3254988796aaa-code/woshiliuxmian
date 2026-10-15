@@ -125,8 +125,8 @@ def main():
     info = plistlib.loads((binary.parent / "Info.plist").read_bytes())
     if info.get("CFBundleExecutable") != "SeekDB" or info.get("CFBundlePackageType") != "FMWK":
         raise ValueError("Invalid framework bundle identity")
-    if info.get("MinimumOSVersion") != args.deployment or info.get("SeekDBTestHooks") != "disabled":
-        raise ValueError("Invalid framework deployment or hook metadata")
+    if info.get("MinimumOSVersion") != args.deployment:
+        raise ValueError("Invalid framework deployment metadata")
     public_header = binary.parent / "Headers/seekdb.h"
     if public_header.read_bytes() != (source / "src/observer/in_process/seekdb.h").read_bytes():
         raise ValueError("Public C ABI header is missing or changed")
@@ -154,8 +154,6 @@ def main():
     if actual != expected:
         raise ValueError("Unexpected ABI exports: " + repr(actual ^ expected))
     markers = output("strings", str(binary))
-    if "SEEKDB_IN_PROCESS_ARTIFACT_HOOK_MODE=disabled" not in markers or "SEEKDB_IN_PROCESS_ARTIFACT_HOOK_MODE=enabled" in markers:
-        raise ValueError("Missing or conflicting disabled test hook marker")
     revision = output("git", "-C", str(source), "rev-parse", "HEAD").strip()
     if info.get("SeekDBSourceRevision") != revision[:12]:
         raise ValueError("Framework metadata does not match HEAD; reconfigure and rebuild")
@@ -166,7 +164,7 @@ def main():
         "source_dirty": bool(output("git", "-C", str(source), "status", "--porcelain").strip()),
         "source_diff_sha256": hashlib.sha256(subprocess.check_output(["git", "-C", str(source), "diff", "HEAD"])).hexdigest(),
         "platform": platform, "architecture": "arm64", "deployment_target": args.deployment,
-        "test_hooks": "disabled", "binary_sha256": digest(binary),
+        "binary_sha256": digest(binary),
         "public_header_sha256": digest(public_header),
         "dynamic_dependencies": dependencies, "static_dependencies": archive_inventory(build, source),
         "exported_symbols": sorted(actual),

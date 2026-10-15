@@ -15,13 +15,14 @@
 #include "seekdb.h"
 #include "seekdb_in_process.h"
 #include "seekdb_platform.h"
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
-#include <mutex>
 #include <string>
 #include <sys/un.h>
 #include <unistd.h>
 #include <vector>
+#include "lib/ob_errno.h"
 
 namespace {
 struct SeekdbHandleImpl {
@@ -29,8 +30,6 @@ struct SeekdbHandleImpl {
   char *socket_alias_dir;
 };
 
-std::mutex handles_mutex;
-size_t handles = 0;
 thread_local std::string last_open_error;
 
 int open_failed(int code, const char *message)
@@ -39,15 +38,81 @@ int open_failed(int code, const char *message)
   return code;
 }
 
-/** Validate desktop key/value syntax and the iOS socket-only restriction. */
+/** Validate desktop key/value syntax and the in-process socket-only restriction. */
 const char *invalid_parameters(const char **parameters)
 {
   for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
     if (parameters[i][0] == '\0' || parameters[i + 1] == nullptr) {
       return "parameters must be key/value pairs with non-empty keys";
     }
+    if (std::strcmp(parameters[i], "port") == 0) {
+      char *end = nullptr;
+      errno = 0;
+      long port = std::strtol(parameters[i + 1], &end, 10);
+      if (errno != 0 || parameters[i + 1][0] == '\0' || *end != '\0' || port != 0) {
+        return "TCP is not available for the in-process engine; port must be 0";
+      }
+    }
+    if (std::strcmp(parameters[i], "mysql_port_mode") == 0
+        && std::strcmp(parameters[i + 1], "disabled") != 0) {
+      return "TCP is not available for the in-process engine; mysql_port_mode must be disabled";
+    }
   }
-  return seekdb_platform::invalid_parameters(parameters);
+  return nullptr;
+}
+
+void append(std::vector<std::string> &values, const char *const *parameters)
+{
+  for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; ++i) {
+    values.emplace_back(parameters[i]);
+  }
+}
+
+bool has_key(const std::vector<std::string> &parameters, const char *key)
+{
+  bool found = false;
+  for (size_t i = 0; i < parameters.size(); i += 2) {
+    found = found || parameters[i] == key;
+  }
+  return found;
+}
+
+std::vector<std::string> startup_parameters()
+{
+  std::vector<std::string> result = {"mysql_port_mode", "disabled"};
+  append(result, seekdb_platform::startup_parameters());
+  return result;
+}
+
+std::vector<std::string> initial_parameters(const char **parameters, const std::vector<std::string> &startup)
+{
+  std::vector<std::string> result = {"memory_budget", "1G", "log_disk_size", "2G"};
+  append(result, seekdb_platform::initial_defaults());
+  const size_t defaults = result.size();
+  for (size_t i = 0; parameters != nullptr && parameters[i] != nullptr; i += 2) {
+    bool overridden = false;
+    for (size_t j = 0; j < defaults; j += 2) {
+      if (result[j] == parameters[i]) {
+        result[j + 1] = parameters[i + 1];
+        overridden = true;
+      }
+    }
+    if (!overridden && std::strcmp(parameters[i], "port") != 0 && !has_key(startup, parameters[i])) {
+      result.emplace_back(parameters[i]);
+      result.emplace_back(parameters[i + 1]);
+    }
+  }
+  return result;
+}
+
+std::vector<const char *> pointers(const std::vector<std::string> &values)
+{
+  std::vector<const char *> result;
+  for (const auto &value : values) {
+    result.push_back(value.c_str());
+  }
+  result.push_back(nullptr);
+  return result;
 }
 
 /** Release a sandbox socket alias and the opaque handle's owned strings. */
@@ -108,37 +173,28 @@ int seekdb_open(const char *directory, const char **parameters, SeekdbHandle *ou
     return open_failed(SEEKDB_INVALID_ARGUMENT, "out_handle must not be NULL");
   }
   *out_handle = nullptr;
-  if (directory == nullptr || directory[0] != '/') {
-    return open_failed(SEEKDB_INVALID_ARGUMENT, "db_dir must be an absolute path");
-  }
   if (const char *message = invalid_parameters(parameters)) {
     return open_failed(SEEKDB_INVALID_ARGUMENT, message);
-  }
-  std::lock_guard<std::mutex> guard(handles_mutex);
-  auto state = seekdb_in_process_get_state();
-  if (state == SEEKDB_IN_PROCESS_STOPPED || state == SEEKDB_IN_PROCESS_FAILED) {
-    return open_failed(SEEKDB_INTERNAL_ERROR, seekdb_platform::stopped_message());
   }
   auto *handle = static_cast<SeekdbHandleImpl *>(std::calloc(1, sizeof(SeekdbHandleImpl)));
   if (handle == nullptr) {
     return open_failed(SEEKDB_INTERNAL_ERROR, "out of memory");
   }
-  std::vector<std::string> initial = seekdb_platform::initial_parameters(parameters);
-  std::vector<const char *> initial_pointers;
-  for (const auto &parameter : initial) {
-    initial_pointers.push_back(parameter.c_str());
-  }
-  initial_pointers.push_back(nullptr);
-  if (seekdb_in_process_start(directory, seekdb_platform::startup_parameters(), initial_pointers.data()) != 0) {
+  std::vector<std::string> startup = startup_parameters();
+  std::vector<std::string> initial = initial_parameters(parameters, startup);
+  std::vector<const char *> startup_pointers = pointers(startup);
+  std::vector<const char *> initial_pointers = pointers(initial);
+  int ret = seekdb_in_process_start(directory, startup_pointers.data(), initial_pointers.data());
+  if (ret != oceanbase::common::OB_SUCCESS) {
     destroy_handle(handle);
-    return open_failed(SEEKDB_INTERNAL_ERROR, seekdb_in_process_last_error());
+    return open_failed(ret == oceanbase::common::OB_INVALID_ARGUMENT ? SEEKDB_INVALID_ARGUMENT : SEEKDB_INTERNAL_ERROR,
+                       seekdb_in_process_last_error());
   }
   if (!prepare_socket(handle, seekdb_in_process_socket_path())) {
     seekdb_in_process_stop();
     destroy_handle(handle);
     return open_failed(SEEKDB_INTERNAL_ERROR, "cannot prepare the Unix socket path");
   }
-  ++handles;
   *out_handle = handle;
   return SEEKDB_SUCCESS;
 }
@@ -167,16 +223,10 @@ const char *seekdb_last_open_error(void)
 /** Release this handle; the last handle stops and joins the one-shot engine. */
 int seekdb_close(SeekdbHandle opaque)
 {
-  if (opaque == nullptr) {
+  if (opaque == nullptr || seekdb_in_process_stop() == oceanbase::common::OB_NOT_INIT) {
     return SEEKDB_INVALID_ARGUMENT;
   }
-  std::lock_guard<std::mutex> guard(handles_mutex);
-  if (handles == 0) {
-    return SEEKDB_INVALID_ARGUMENT;
-  }
-  --handles;
-  int result = seekdb_in_process_stop() == 0 ? SEEKDB_SUCCESS : SEEKDB_INTERNAL_ERROR;
   destroy_handle(static_cast<SeekdbHandleImpl *>(opaque));
-  return result;
+  return SEEKDB_SUCCESS;
 }
 }
