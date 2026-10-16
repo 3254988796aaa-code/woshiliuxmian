@@ -25,6 +25,9 @@
 
 %{
 #include <stdint.h>
+#ifndef _WIN32
+#include <strings.h>
+#endif
 #define YYDEBUG 1
 %}
 

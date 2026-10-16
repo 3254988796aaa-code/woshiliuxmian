@@ -627,12 +627,12 @@ protected:
 
 
       int64_t stmt_used = tsc_rtdef_.scan_rtdef_.stmt_allocator_.get_alloc()->used();
-      if (stmt_used > 2L*1024*1024*1024) {
+      if (stmt_used > 2LL*1024*1024*1024) {
         SQL_LOG_RET(WARN,OB_ERR_UNEXPECTED,"stmt memory used over the threshold",K(stmt_used));
       }
 
       int64_t scan_used = tsc_rtdef_.scan_rtdef_.scan_allocator_.get_alloc()->used();
-      if (scan_used > 2L*1024*1024*1024) {
+      if (scan_used > 2LL*1024*1024*1024) {
         SQL_LOG_RET(WARN,OB_ERR_UNEXPECTED,"scan memory used over the threshold",K(scan_used));
       }
     }

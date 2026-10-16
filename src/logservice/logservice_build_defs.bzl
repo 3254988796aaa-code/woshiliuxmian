@@ -62,8 +62,6 @@ LOGSERVICE_UNITY_GROUPS = [
             "src/logservice/palf/log_iterator_storage.cpp",
             "src/logservice/palf/log_loop_thread.cpp",
             "src/logservice/palf/log_meta.cpp",
-            "src/logservice/palf/log_meta_entry.cpp",
-            "src/logservice/palf/log_meta_entry_header.cpp",
             "src/logservice/palf/log_meta_info.cpp",
             "src/logservice/palf/log_reader.cpp",
         ],

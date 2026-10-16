@@ -711,7 +711,6 @@ _OBSERVER_RUNTIME_GROUP_OBLIB_DEPS = {
         "//src/oblib:oblib_collections_utilities",
         "//src/oblib:oblib_common",
         "//src/oblib:oblib_compression",
-        "//src/oblib:oblib_compression_integration",
         "//src/oblib:oblib_compression_support",
         "//src/oblib:oblib_concurrency_advanced",
         "//src/oblib:oblib_concurrency_model",

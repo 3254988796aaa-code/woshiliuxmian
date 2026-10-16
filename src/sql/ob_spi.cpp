@@ -1503,14 +1503,14 @@ ObPLSPITraceIdGuard::ObPLSPITraceIdGuard(const ObString &sql,
 
     if (reused_trace_id != nullptr && reused_trace_id->is_valid()) {
       // do not log when fetching from cursor
-      ObCurTraceId::get_trace_id()->set(*reused_trace_id);
+      ObCurTraceId::set(*reused_trace_id);
     } else {
       ObCurTraceId::TraceId new_trace_id;
       new_trace_id.init(origin_trace_id_.get_addr());
 
       // log with PL trace_id
 
-      ObCurTraceId::get_trace_id()->set(new_trace_id);
+      ObCurTraceId::set(new_trace_id);
     }
   }
 }
@@ -1522,7 +1522,7 @@ ObPLSPITraceIdGuard::~ObPLSPITraceIdGuard()
   if (OB_NOT_NULL(ObCurTraceId::get_trace_id())) {
     curr_trace_id.set(*ObCurTraceId::get_trace_id());
     session_.set_last_trace_id(ObCurTraceId::get_trace_id());
-    ObCurTraceId::get_trace_id()->set(origin_trace_id_);
+    ObCurTraceId::set(origin_trace_id_);
 
     if (OB_FAIL(ret) && ret != OB_READ_NOTHING) {
       LOG_WARN("sql execution finished, trace id restored",

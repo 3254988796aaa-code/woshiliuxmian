@@ -5,6 +5,14 @@ set -uo pipefail
 readonly TOPDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly DEP_INIT_DIR="${TOPDIR}/deps/init"
 readonly DEVTOOLS_DIR="${TOPDIR}/deps/3rd/usr/local/oceanbase/devtools"
+readonly WASM_BUILD_DIR="${TOPDIR}/build_wasm_engine"
+# The WebAssembly build uses only the host parser generators and the source
+# headers that tools/wasm/prepare-headers.py copies from the native dependency
+# list. Linux lists package the curl headers as devdeps-libcurl-static.
+readonly WASM_DEP_PACKAGES="obdevtools-bison obdevtools-flex devdeps-boost devdeps-fast-float devdeps-libcurl devdeps-libcurl-static devdeps-relaxed-rapidjson devdeps-roaringbitmap-croaring"
+readonly -a WASM_HOST_PATHS=(devtools/bin/bison devtools/bin/flex
+  deps/devel/include/boost deps/devel/include/curl deps/devel/include/fast_float
+  deps/devel/include/rapidjson deps/devel/include/roaring)
 readonly -a ALL_ARGS=("$@")
 
 function echo_log
@@ -28,10 +36,10 @@ function usage
   cat <<'EOF'
 Usage:
   ./build.sh -h
-  ./build.sh init [--android | --ios [--simulator]]
+  ./build.sh init [--android | --ios [--simulator] | --wasm]
   ./build.sh clean
-  ./build.sh release [--init] [--android | --ios [--simulator]] [-DName=Value ...]
-  ./build.sh release [--init] [--android | --ios [--simulator]] [-DName=Value ...] --make [MakeOptions]
+  ./build.sh release [--init] [--android | --ios [--simulator] | --wasm] [-DName=Value ...]
+  ./build.sh release [--init] [--android | --ios [--simulator] | --wasm] [-DName=Value ...] --make [MakeOptions]
   ./build.sh sanity [--init] [-DName=Value ...]
   ./build.sh sanity [--init] [-DName=Value ...] --make [MakeOptions]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...]
@@ -48,6 +56,9 @@ Supported compatibility build:
   iOS simulator with --simulator; --make builds SeekDB.framework. For iOS,
   --init also builds deps/ios-build into deps/ios/<sdk>/devel.
   iOS also accepts -DCMAKE_BUILD_TYPE=Debug.
+  WebAssembly (--wasm): the browser engine seekdb_wasm_database in
+  build_wasm_engine, built with the Emscripten version named in
+  tools/wasm/emscripten-version; see docs/webassembly-shell.md.
   Windows x64 uses build.ps1.
 
 Examples:
@@ -64,6 +75,7 @@ Examples:
   ./build.sh tgz --init --make -j16 tgz
   ./build.sh release --android --init --make -j16
   ./build.sh release --ios --simulator --init --make -j8
+  ./build.sh release --wasm --init --make
 
 On Linux, CMake also provides module unit-test targets and the pretest aggregate.
 See docs/developer-guide/en/unittest.md for build and test commands.
@@ -120,6 +132,10 @@ function do_init
   local status=0
   local -a ios_args=(--jobs "$(cpu_count)" --reuse)
 
+  if [[ "${platform}" == wasm ]]; then
+    do_wasm_init
+    return
+  fi
   if [[ "${platform}" == android ]]; then
     android_build=true
   elif [[ "${platform}" == ios-simulator ]]; then
@@ -153,6 +169,89 @@ function do_init
   echo_log "dependency initialization completed in $((elapsed / 60))m$((elapsed % 60))s"
 }
 
+function require_wasm_tools
+{
+  local version
+  local tool
+
+  for tool in curl python3 rustup; do
+    if ! command -v "${tool}" >/dev/null 2>&1; then
+      echo_err "${tool} is required for the WebAssembly build"
+      return 1
+    fi
+  done
+  if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))'; then
+    echo_err "the WebAssembly build requires Python 3.12 or newer"
+    return 1
+  fi
+  version="$(cat "${TOPDIR}/tools/wasm/emscripten-version")"
+  if ! command -v emcc >/dev/null 2>&1 ||
+      ! emcc --version | head -n 1 | grep -Eq " ${version//./\\.}([ -]|$)"; then
+    echo_err "emcc from Emscripten ${version} (tools/wasm/emscripten-version) is required on PATH"
+    echo_err "found: $(command -v emcc || echo none) $(emcc --version 2>/dev/null | head -n 1)"
+    echo_err "install it, for example: brew install emscripten"
+    return 1
+  fi
+}
+
+function wasm_host_deps_missing
+{
+  local path
+  for path in "${WASM_HOST_PATHS[@]}"; do
+    [[ -e "${TOPDIR}/deps/3rd/usr/local/oceanbase/${path}" ]] || return 0
+  done
+  return 1
+}
+
+function do_wasm_init
+{
+  local start_time end_time elapsed
+  local status=0
+
+  require_wasm_tools || return $?
+  start_time="$(date +%s)"
+  # A complete native dependency directory already provides these packages;
+  # dep_create.sh would replace it with the smaller set.
+  if wasm_host_deps_missing; then
+    (
+      cd "${DEP_INIT_DIR}" &&
+        DEP_PACKAGES="${WASM_DEP_PACKAGES}" bash dep_create.sh
+    ) || status=$?
+    if (( status != 0 )); then
+      echo_err "dependency initialization failed with status ${status}"
+      return "${status}"
+    fi
+    if wasm_host_deps_missing; then
+      echo_err "dependency initialization did not provide bison, flex and the source headers"
+      return 1
+    fi
+  fi
+  rustup toolchain install "$(cat "${TOPDIR}/tools/wasm/rust-toolchain-version")" \
+    --no-self-update --profile minimal --component rust-src \
+    --target wasm32-unknown-emscripten || return $?
+  bash "${TOPDIR}/tools/wasm/build-deps.sh" || return $?
+
+  end_time="$(date +%s)"
+  elapsed=$((end_time - start_time))
+  echo_log "WebAssembly dependency initialization completed in $((elapsed / 60))m$((elapsed % 60))s"
+}
+
+function configure_wasm
+{
+  local build_dir=$1
+  shift
+  local cmake_command
+
+  cmake_command="$(find_cmake)" || fail "cmake not found; install CMake 3.20+"
+  require_wasm_tools || return $?
+  # Configuration requires the Rust archives and headers that build-rust-nio.sh
+  # exports; cargo rebuilds them incrementally.
+  bash "${TOPDIR}/tools/wasm/build-rust-nio.sh" || return $?
+  echo_log "configuring CMake WebAssembly build: ${build_dir}"
+  emcmake "${cmake_command}" -S "${TOPDIR}/src/wasm" -B "${build_dir}" \
+    -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release "$@"
+}
+
 function release_build_dir
 {
   local platform=$1
@@ -166,6 +265,9 @@ function release_build_dir
     ios-simulator)
       printf '%s\n' "${TOPDIR}/build_ios_simulator_release"
       ;;
+    wasm)
+      printf '%s\n' "${WASM_BUILD_DIR}"
+      ;;
     *)
       printf '%s\n' "${TOPDIR}/build_release"
       ;;
@@ -177,7 +279,7 @@ function remove_managed_build_dir
   local build_dir=$1
 
   case "${build_dir}" in
-    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_sanity"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_ios_release"|"${TOPDIR}/build_ios_simulator_release"|"${TOPDIR}/build_rpm"|"${TOPDIR}/build_deb"|"${TOPDIR}/build_tgz")
+    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_sanity"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_ios_release"|"${TOPDIR}/build_ios_simulator_release"|"${TOPDIR}/build_rpm"|"${TOPDIR}/build_deb"|"${TOPDIR}/build_tgz"|"${WASM_BUILD_DIR}"|"${TOPDIR}/build_wasm_rust_runtime")
       ;;
     *)
       fail "refusing to clean unexpected path: ${build_dir}"
@@ -204,6 +306,11 @@ function configure_cmake
     -DCMAKE_BUILD_TYPE=RelWithDebInfo
     -DOB_ENABLE_UNITY=ON
   )
+
+  if [[ "${platform}" == wasm ]]; then
+    configure_wasm "${build_dir}" "$@"
+    return
+  fi
 
   cmake_command="$(find_cmake)" || fail "cmake not found; initialize dependencies or install CMake 3.20+"
 
@@ -265,8 +372,11 @@ function select_platform
   local android_build=$1
   local ios_build=$2
   local simulator=$3
+  local wasm_build=$4
 
-  if [[ "${android_build}" == true && "${ios_build}" == true ]]; then
+  if [[ "${wasm_build}" == true && ( "${android_build}" == true || "${ios_build}" == true ) ]]; then
+    fail "--wasm cannot be combined with --android or --ios"
+  elif [[ "${android_build}" == true && "${ios_build}" == true ]]; then
     fail "--android and --ios cannot be combined"
   elif [[ "${ios_build}" == false && "${simulator}" == true ]]; then
     fail "--simulator requires --ios"
@@ -278,6 +388,8 @@ function select_platform
     printf 'ios-simulator\n'
   elif [[ "${ios_build}" == true ]]; then
     printf 'ios\n'
+  elif [[ "${wasm_build}" == true ]]; then
+    printf 'wasm\n'
   else
     printf 'host\n'
   fi
@@ -291,6 +403,7 @@ function do_release
   local android_build=false
   local ios_build=false
   local simulator=false
+  local wasm_build=false
   local platform
   local build_dir
   local make_target=seekdb
@@ -311,6 +424,10 @@ function do_release
         ;;
       --simulator)
         simulator=true
+        ;;
+      --wasm)
+        wasm_build=true
+        make_target=database
         ;;
       --make)
         if [[ "${need_make}" == true ]]; then
@@ -344,7 +461,7 @@ function do_release
     shift
   done
 
-  platform="$(select_platform "${android_build}" "${ios_build}" "${simulator}")" || exit $?
+  platform="$(select_platform "${android_build}" "${ios_build}" "${simulator}" "${wasm_build}")" || exit $?
   require_host
   if [[ "${need_init}" == true ]]; then
     do_init "${platform}" || exit $?
@@ -361,7 +478,10 @@ function do_release
     if (( ${#make_args[@]} == 0 )); then
       make_args=(-j"$(cpu_count)")
     fi
-    make -C "${build_dir}" "${make_args[@]}" "${make_target}"
+    make -C "${build_dir}" "${make_args[@]}" "${make_target}" || exit $?
+    if [[ "${platform}" == wasm ]]; then
+      echo_log "serve the shell with: python3 tools/wasm/serve-shell.py --build-dir ${build_dir}"
+    fi
   fi
 }
 
@@ -386,7 +506,7 @@ function do_sanity
         need_make=true
         collecting_make_args=true
         ;;
-      --android|--ios|--simulator|--coverage|--ob-make)
+      --android|--ios|--simulator|--wasm|--coverage|--ob-make)
         fail "$1 is outside the CMake Sanity build boundary"
         ;;
       -D*)
@@ -467,7 +587,7 @@ function do_package
         need_make=true
         collecting_make_args=true
         ;;
-      --android|--ios|--simulator|--coverage|--ob-make)
+      --android|--ios|--simulator|--wasm|--coverage|--ob-make)
         fail "$1 is outside the CMake ${package_label} compatibility boundary"
         ;;
       -D*)
@@ -548,7 +668,9 @@ function do_clean
       "${TOPDIR}/build_ios_simulator_release" \
       "${TOPDIR}/build_rpm" \
       "${TOPDIR}/build_deb" \
-      "${TOPDIR}/build_tgz"; do
+      "${TOPDIR}/build_tgz" \
+      "${WASM_BUILD_DIR}" \
+      "${TOPDIR}/build_wasm_rust_runtime"; do
     if [[ -d "${build_dir}" ]]; then
       remove_managed_build_dir "${build_dir}"
       echo_log "removed ${build_dir}"
@@ -565,6 +687,7 @@ function do_init_command
   local android_build=false
   local ios_build=false
   local simulator=false
+  local wasm_build=false
   local platform
 
   while (( $# > 0 )); do
@@ -578,13 +701,16 @@ function do_init_command
       --simulator)
         simulator=true
         ;;
+      --wasm)
+        wasm_build=true
+        ;;
       *)
         fail "unexpected init argument: $1"
         ;;
     esac
     shift
   done
-  platform="$(select_platform "${android_build}" "${ios_build}" "${simulator}")" || exit $?
+  platform="$(select_platform "${android_build}" "${ios_build}" "${simulator}" "${wasm_build}")" || exit $?
   require_host
   do_init "${platform}"
 }

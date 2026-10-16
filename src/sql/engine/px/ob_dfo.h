@@ -1075,7 +1075,7 @@ public :
     return *this;
   }
 
-  void set_trace_id(TraceId& trace_id) { trace_id_ = trace_id; }
+  void set_trace_id(const TraceId& trace_id) { trace_id_ = trace_id; }
   const TraceId& get_trace_id() const { return trace_id_; }
   int8_t get_log_level() const { return log_level_; }
   void set_log_level(const int8_t log_level) { log_level_ = log_level; }

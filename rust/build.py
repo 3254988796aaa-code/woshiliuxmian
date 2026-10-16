@@ -28,6 +28,8 @@ def main():
     parser.add_argument("--target")
     parser.add_argument("--target-dir", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("cargo_args", nargs="*",
+                        help="extra arguments for cargo build, given after --")
     args = parser.parse_args()
     workspace = Path(__file__).resolve().parent
     exports = json.loads((workspace / "exports.json").read_text())
@@ -38,7 +40,9 @@ def main():
                "--target-dir", str(target_dir), "--message-format=json-render-diagnostics"]
     if args.target:
         command.extend(["--target", args.target])
+    command.extend(args.cargo_args)
     libraries = {}
+    packages = {}
     build_dirs = {}
     # Preserve inherited GNU Make jobserver descriptors when CMake provides them.
     with subprocess.Popen(command, cwd=workspace, stdout=subprocess.PIPE,
@@ -48,16 +52,19 @@ def main():
             if message["reason"] == "build-script-executed":
                 build_dirs[message["package_id"]] = Path(message["out_dir"])
             elif message["reason"] == "compiler-artifact":
+                packages[message["target"]["name"]] = message["package_id"]
                 if "staticlib" in message["target"]["crate_types"]:
                     archive = next(Path(p) for p in message["filenames"]
                                    if p.endswith((".a", ".lib")))
-                    libraries[message["target"]["name"]] = (archive, message["package_id"])
+                    libraries[message["target"]["name"]] = archive
         if cargo.wait():
             raise SystemExit(cargo.returncode)
     output.mkdir(parents=True, exist_ok=True)
     for name, export in exports.items():
-        archive, package = libraries[name]
-        shutil.copyfile(archive, output / archive.name)
+        archive = libraries[export.get("library", name)]
+        package = packages[export["crate"].replace("-", "_")]
+        library_name = name + ".lib" if archive.suffix == ".lib" else "lib" + name + ".a"
+        shutil.copyfile(archive, output / library_name)
         for header, source in export["headers"].items():
             destination = output / "include" / header
             destination.parent.mkdir(parents=True, exist_ok=True)

@@ -13,6 +13,16 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND GCC9)
 endif()
 set(_jemalloc_platform_env "")
 set(_jemalloc_configure_args "--with-jemalloc-prefix=je_")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   CMAKE_C_COMPILER_ID MATCHES "Clang" AND
+   OB_USE_LLD AND OB_LD_BIN)
+  # Keep nested Autoconf probes on the same linker as the main build. The
+  # devtools GNU ld is too old to read Ubuntu 24.04 glibc's .relr.dyn
+  # sections, so allowing clang to select it makes configure report the
+  # misleading "C compiler cannot create executables" error.
+  list(APPEND _jemalloc_platform_env
+    "LDFLAGS=--ld-path=${OB_LD_BIN}")
+endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   # Configure must not execute iOS probes on the macOS build host.
   string(APPEND _jemalloc_configure_args

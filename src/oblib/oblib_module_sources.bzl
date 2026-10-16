@@ -14,30 +14,6 @@ def oblib_select_unity_groups(groups, names, language = "c++"):
         fail("missing %s Unity groups: %s" % (language, missing))
     return selected
 
-def oblib_exclude_unity_sources(groups, paths):
-    excluded = {path: False for path in paths}
-    result = []
-    for group in groups:
-        sources = []
-        for source in group.srcs:
-            if source in excluded:
-                excluded[source] = True
-            else:
-                sources.append(source)
-        if not sources:
-            fail("excluding sources emptied Unity group %s" % group.name)
-        result.append(struct(
-            name = group.name,
-            language = group.language,
-            srcs = sources,
-            generated_srcs = group.generated_srcs,
-            external_srcs = group.external_srcs,
-        ))
-    missing = sorted([path for path, found in excluded.items() if not found])
-    if missing:
-        fail("excluded Unity sources were not found: %s" % missing)
-    return result
-
 def oblib_standalone_sources(sources, key, language = "c++"):
     prefix = "src/oblib/"
     result = []

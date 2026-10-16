@@ -197,6 +197,7 @@ public:
   virtual ~PalfEnvImpl();
 public:
   int init(const PalfOptions &options,
+           share::LocalStore &store,
            const char *base_dir,
            const common::ObAddr &self,
            common::ObILogAllocator *alloc_mgr,
@@ -207,7 +208,7 @@ public:
   // start function contains two meanings:
   //
   // 1. Start all the worker threads contained in PalfEnvImpl
-  // 2. According to the log_storage and meta_storage files included in base_dir, load the required metadata and logs for the log stream, and perform fault recovery
+  // 2. Load local metadata and the log files in base_dir to recover the log stream.
   //
   // @return :TODO
   int start();
@@ -285,6 +286,7 @@ private:
   typedef RWLock::RLockGuard RLockGuard;
   typedef RWLock::WLockGuard WLockGuard;
   RWLock palf_meta_lock_;
+  share::LocalStore *store_;
   common::ObILogAllocator *log_alloc_mgr_;
   ILogBlockPool *log_block_pool_;
   LogIOTaskCbThreadPool cb_thread_pool_;

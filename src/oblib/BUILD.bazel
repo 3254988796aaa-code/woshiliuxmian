@@ -4,7 +4,6 @@ load(
     ":oblib_build_defs.bzl",
     "OBLIB_STANDALONE_SOURCES",
     "OBLIB_UNITY_GROUPS",
-    "oblib_exclude_unity_sources",
     "oblib_select_unity_groups",
     "oblib_standalone_sources",
 )
@@ -82,12 +81,9 @@ _RPC_GROUP_NAMES = [
     "oblib_rpc_obmysql_packet_0",
 ]
 
-_FOUNDATION_CXX_GROUPS = oblib_exclude_unity_sources(
-    oblib_select_unity_groups(
-        OBLIB_UNITY_GROUPS["src/oblib/lib:oblib_lib"],
-        _FOUNDATION_CXX_GROUP_NAMES,
-    ),
-    ["src/oblib/lib/oblog/ob_log_compressor.cpp"],
+_FOUNDATION_CXX_GROUPS = oblib_select_unity_groups(
+    OBLIB_UNITY_GROUPS["src/oblib/lib:oblib_lib"],
+    _FOUNDATION_CXX_GROUP_NAMES,
 )
 
 seekdb_semantic_unity_cc_library(
@@ -98,6 +94,7 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":_oblib_implementation_headers",
         ":oblib_foundation",
+        "//rust:logger",
         "@seekdb_3rd_headers//:fast_float_headers",
     ],
     copts = SEEKDB_OBLIB_COPTS + seekdb_openmp_copts(),
@@ -336,9 +333,7 @@ cc_library(
     srcs = oblib_standalone_sources(
         OBLIB_STANDALONE_SOURCES,
         "src/oblib/lib/compress:compress",
-    ) + [
-        "lib/oblog/ob_log_compressor.cpp",
-    ],
+    ),
     implementation_deps = [
         ":_oblib_implementation_headers",
         ":_zstd_1_3_8_objects",

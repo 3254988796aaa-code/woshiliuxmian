@@ -109,7 +109,6 @@ function mirror_create {
   mirror_path=$DEPLOY_PATH/mirror_create
   mkdir -p $mirror_path/bin/ && \
     cp -rf $DEPLOY_PATH/etc $mirror_path/ && \
-    rm -f $mirror_path/etc/seekdb.data_version.bin && \
     cp -rf $DEPLOY_PATH/admin $mirror_path/ && \
     ln -sf $DEPLOY_PATH/bin/seekdb $mirror_path/bin/seekdb && \
     success=1

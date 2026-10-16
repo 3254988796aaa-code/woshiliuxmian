@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_basic_stats_estimator.h"
+#include <inttypes.h>
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/ob_storage_estimator.h"
 #include "sql/optimizer/stat/ob_topk_hist_estimator.h"
@@ -576,7 +577,7 @@ int ObBasicStatsEstimator::update_last_modified_count(sqlclient::ObISQLConnectio
     /*do nothing*/
   } else if (OB_FAIL(udpate_sql.append_fmt(
         "update %s set last_inserts = inserts, last_updates = updates, last_deletes = deletes " \
-        "where table_id = %lu %s %s;",
+        "where table_id = %" PRIu64 " %s %s;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
         !tablet_list.empty() ? "and tablet_id in" : " ",
@@ -728,7 +729,7 @@ int ObBasicStatsEstimator::gen_tablet_list(const ObTableStatParam &param,
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
       char prefix = (i == 0 ? '(' : ' ');
       char suffix = (i == tablet_ids.count() - 1 ? ')' : ',');
-      if (OB_FAIL(tablet_list.append_fmt("%c%lu%c", prefix, tablet_ids.at(i), suffix))) {
+      if (OB_FAIL(tablet_list.append_fmt("%c%" PRIu64 "%c", prefix, tablet_ids.at(i), suffix))) {
       } else {/*do nothing*/}
     }
   }

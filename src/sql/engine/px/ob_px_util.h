@@ -923,9 +923,9 @@ public:
     // **append** warning msg
     for (int i = 0; i < from.warnings_.count(); ++i) {
       const common::ObWarningBuffer::WarningItem &warning_item = from.warnings_.at(i);
-      if (ObLogger::USER_WARN == warning_item.log_level_) {
+      if (USER_WARN == warning_item.log_level_) {
         FORWARD_USER_WARN(warning_item.code_, warning_item.msg_);
-      } else if (ObLogger::USER_NOTE == warning_item.log_level_) {
+      } else if (USER_NOTE == warning_item.log_level_) {
         FORWARD_USER_NOTE(warning_item.code_, warning_item.msg_);
       }
     }

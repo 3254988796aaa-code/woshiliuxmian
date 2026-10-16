@@ -112,10 +112,6 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             "//src/oblib:oblib_foundation",
         ],
     ),
-    "server_snapshot_id": struct(
-        hdrs = ["server_snapshot/ob_server_snapshot_id.h"],
-        deps = ["//src/oblib:oblib_foundation"],
-    ),
     "admin_job_storage_interface": struct(
         hdrs = ["storage/ob_admin_job_table_storage.h"],
         deps = [
@@ -469,10 +465,6 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     "redo_log_storage": struct(
         hdrs = [
             "ob_local_device.h",
-            "redolog/ob_log_definition.h",
-            "redolog/ob_log_file_group.h",
-            "redolog/ob_log_file_handler.h",
-            "redolog/ob_log_policy.h",
         ],
         deps = [
             ":io_device_interface",

@@ -192,6 +192,7 @@ cc_library(
 )
 
 _STORAGE_RUNTIME_NATIVE_DEPS = [
+    "//src/share:local_storage_interface",
     "//src/oblib/easy:easy",
     "//src/oblib:common_sql_mode",
     "//src/oblib:oblib_foundation",
@@ -270,7 +271,6 @@ _STORAGE_RUNTIME_NATIVE_DEPS = [
     "//src/share:schema_model_interface",
     "//src/share:schema_registry",
     "//src/share:scn_interface",
-    "//src/share:server_snapshot_id",
     "//src/share:sql_persistence_support",
     "//src/share:statement_type",
     "//src/share:table_access_runtime",
@@ -432,14 +432,13 @@ cc_library(
         "//src/logservice:append_callback_interface",
         "//src/oblib:oblib_db_log_advanced",
         "//src/oblib:oblib_db_meta_runtime",
-        "//src/share:server_snapshot_id",
         "//src/share:time_wheel",
     ] + _STORAGE_INTERFACE_NON_SHARE_DEPS,
     implementation_deps = (
         [
             dep
             for dep in _STORAGE_INTERFACE_SHARE_DEPS
-            if dep not in ["//src/share:server_snapshot_id", "//src/share:time_wheel"]
+            if dep != "//src/share:time_wheel"
         ] +
         _STORAGE_INTERFACE_OBLIB_DEPS
     ),
@@ -1538,6 +1537,7 @@ _STORAGE_GROUP_SHARE_IMPLEMENTATION_DEPS = {
         "//src/share:worker_runtime",
     ],
     "ob_storage_meta_store_0": [
+        "//src/share:local_table_schema",
         "//src/share:cache",
         "//src/share:cluster_metadata_persistence",
         "//src/share:cluster_topology",
@@ -1753,46 +1753,6 @@ _STORAGE_GROUP_SHARE_IMPLEMENTATION_DEPS = {
         "//src/share:transaction_id",
         "//src/share:unit_topology",
         "//src/share:utility_types",
-        "//src/share:vector",
-        "//src/share:worker_runtime",
-    ],
-    "ob_storage_slog_0": [
-        "//src/share:cache",
-        "//src/share:cluster_metadata_persistence",
-        "//src/share:cluster_topology",
-        "//src/share:cluster_version_interface",
-        "//src/share:collection_types",
-        "//src/share:compaction_runtime",
-        "//src/share:config",
-        "//src/share:config_value_support",
-        "//src/share:core_types",
-        "//src/share:datum",
-        "//src/share:ddl_protocol",
-        "//src/share:delegate_interface",
-        "//src/share:error_codes",
-        "//src/share:execution_contracts",
-        "//src/share:freeze_coordination",
-        "//src/share:io",
-        "//src/share:log_protocol",
-        "//src/share:ls_restore_status",
-        "//src/share:memory_support",
-        "//src/share:redo_log_storage",
-        "//src/share:resource_limit_calculator",
-        "//src/share:rpc_message_types",
-        "//src/share:runtime_context",
-        "//src/share:schema_access",
-        "//src/share:schema_model_interface",
-        "//src/share:schema_registry",
-        "//src/share:scn_interface",
-        "//src/share:statement_type",
-        "//src/share:table_lock_priority",
-        "//src/share:tablet_autoincrement_types",
-        "//src/share:tablet_metadata",
-        "//src/share:task_control",
-        "//src/share:tenant_runtime",
-        "//src/share:time_wheel",
-        "//src/share:transaction_id",
-        "//src/share:unit_topology",
         "//src/share:vector",
         "//src/share:worker_runtime",
     ],

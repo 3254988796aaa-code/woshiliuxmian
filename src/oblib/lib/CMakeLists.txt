@@ -2,11 +2,6 @@ add_subdirectory(compress)
 add_subdirectory(restore)
 
 seekdb_apply_unity_inventory(oblib_lib SEEKDB_OBLIB_LIB_UNITY)
-# Bazel deliberately compiles the compression implementation outside its
-# historical OBLib Unity group; preserve that action boundary here.
-set_source_files_properties(
-  ${CMAKE_SOURCE_DIR}/src/oblib/lib/oblog/ob_log_compressor.cpp
-  PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 ob_lib_add_target(oblib_lib)
 
 seekdb_apply_unity_inventory(oblib_lib_simd SEEKDB_OBLIB_SIMD_UNITY)

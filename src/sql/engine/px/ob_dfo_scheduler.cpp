@@ -326,7 +326,7 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
   const ObPhysicalPlan *phy_plan = NULL;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   ObSQLSessionInfo *session = NULL;
-  ObCurTraceId::TraceId *cur_thread_id = NULL;
+  const ObCurTraceId::TraceId *cur_thread_id = NULL;
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(NULL == (phy_plan = dfo.get_phy_plan()))) {
       ret = OB_ERR_UNEXPECTED;

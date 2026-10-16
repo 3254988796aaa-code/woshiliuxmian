@@ -136,25 +136,7 @@ if (OB_USE_CLANG)
       -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS -D_NO_EXCEPTION
       -DOCI_LINK_RUNTIME
       -Wall -Wextra -Wformat -Werror
-      -Wno-deprecated -Wno-address-of-packed-member -Wno-sign-compare -Wno-tautological-compare
-      -Wno-psabi -Wno-c99-designator -Wno-int-in-bool-context -Wno-sizeof-array-div
-      -Wno-implicit-const-int-float-conversion -Wno-fortify-source -Wno-non-c-typedef-for-linkage
-      -Wno-uninitialized-const-reference -Wno-unused-function -Wno-atomic-alignment
-      -Wno-tautological-constant-out-of-range-compare -Wno-unused-parameter
-      -Wno-string-plus-int -Wno-misleading-indentation -Wno-unused-private-field
-      $<$<COMPILE_LANGUAGE:CXX>:-Wno-overloaded-virtual -Wno-reserved-user-defined-literal
-      -Wno-self-assign -Wno-inconsistent-missing-override -Wno-mismatched-tags -Wno-unused-variable
-      -Wno-invalid-offsetof -Wno-unevaluated-expression -Wno-constant-logical-operand>
-      $<$<COMPILE_LANGUAGE:C>:-Wno-unused-parameter>
-      -Wno-unused-but-set-variable -Wno-null-pointer-subtraction -Wno-compound-token-split-by-macro
-      -Wno-packed-non-pod -Wno-format -Wno-shorten-64-to-32 -Wno-unused-but-set-parameter -Wno-single-bit-bitfield-constant-conversion
-      ${ENUM_CONSTEXPR_WARNING_FLAG} -Wno-covered-switch-default
-      -Wno-bitwise-instead-of-logical -Wno-suggest-override -Wno-non-virtual-dtor -Wno-cast-qual
-      -Wno-unused-value -Wno-macro-redefined -Wno-reinterpret-base-class -Wno-register
-      -Wno-implicit-fallthrough -Wno-deprecated-non-prototype
-      -Wno-ambiguous-reversed-operator -Wno-invalid-partial-specialization
-      -Wno-string-concatenation
-      -Wno-vla ${VLA_WARN_FLAG})
+      ${SEEKDB_CLANG_DISABLED_WARNINGS} ${ENUM_CONSTEXPR_WARNING_FLAG} ${VLA_WARN_FLAG})
   endif()
   if(OB_MACOS27)
     include(CheckCXXCompilerFlag)
@@ -354,6 +336,9 @@ else()
     ${ARCH_LDFLAGS}
   )
 endif()
+# Trace/log headers are used by the early allocator objects as well. Propagate
+# the generated cxx header and its build dependency through their shared base.
+target_link_libraries(oblib_base_without_pass INTERFACE logger)
 target_link_libraries(oblib_base INTERFACE oblib_base_without_pass oblib_pass)
 
 function(oblib_add_library target)

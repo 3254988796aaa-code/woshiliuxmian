@@ -71,6 +71,17 @@ function echo_err() {
   echo -e "[dep_create.sh][ERROR] $@" 1>&2
 }
 
+# DEP_PACKAGES, a space-separated list of package names, installs only those
+# packages (the WebAssembly build needs a few host tools and headers).
+function package_selected() {
+  local name
+  [[ -z "${DEP_PACKAGES}" ]] && return 0
+  for name in ${DEP_PACKAGES}; do
+    [[ "$1" == "${name}-"[0-9]* ]] && return 0
+  done
+  return 1
+}
+
 function get_os_release() {
   if [[ "${ANDROID_BUILD}" == "true" ]]; then
     OS_RELEASE="android"
@@ -238,11 +249,12 @@ if [[ "${OS_RELEASE}" == "macos" || "${OS_RELEASE}" == "android" ]]; then
     IS_TAR_PLATFORM=true
 fi
 
-# Compatible with MD5 checksum for macOS and Linux
+# Compatible with MD5 checksum for macOS and Linux. DEP_PACKAGES is part of the
+# checksum so that a partial 3rd directory never passes for a complete one.
 if command -v md5sum >/dev/null 2>&1; then
-    MD5=`md5sum ${DEP_FILE} | cut -d" " -f1`
+    MD5=`(cat ${DEP_FILE}; echo -n "${DEP_PACKAGES}") | md5sum | cut -d" " -f1`
 else
-    MD5=`md5 -r ${DEP_FILE} | cut -d" " -f1`
+    MD5=`(cat ${DEP_FILE}; echo -n "${DEP_PACKAGES}") | md5 -r | cut -d" " -f1`
 fi
 
 # Whether to use shared dependency cache, default is ON, will be OFF under certain conditions
@@ -392,6 +404,7 @@ do
     do
         [[ "$line" == "" ]] && continue
         pkg=${line%%\ *}
+        package_selected "${pkg}" || continue
         target_name="default"
         temp=$(echo "$line" | grep -Eo "target=(\S*)")
         

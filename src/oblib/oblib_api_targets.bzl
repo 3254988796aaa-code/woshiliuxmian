@@ -21,7 +21,7 @@ def declare_oblib_header_interfaces(interface_visibility):
         cc_library(
             name = name,
             hdrs = spec["hdrs"],
-            deps = spec["deps"],
+            deps = spec["deps"] + (["//rust:logger_headers"] if name == "oblib_foundation" else []),
             includes = ["."],
             features = ["layering_check"],
             tags = ["manual"],

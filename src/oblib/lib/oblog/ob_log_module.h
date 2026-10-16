@@ -1032,7 +1032,7 @@ LOG_MOD_END(PL)
 // while the LOG_USER_*_MSG dose not support and only can be used for rpc proxy on the remote/distribute msg.
 #define _LOG_USER_MSG(level, errcode, umsg, args...)                      \
   do {\
-    OB_LOGGER.log_user_message(level, errcode, umsg, ##args);\
+    ::oceanbase::common::log_user_message(level, errcode, umsg, ##args);\
     if (OB_LOG_NEED_TO_PRINT(WARN)) { \
       OB_LOGGER.log_message_fmt("", OB_LOG_NUM_LEVEL(OB_LOG_LEVEL_WARN), errcode, umsg, ##args);\
     } \
@@ -1065,23 +1065,23 @@ LOG_MOD_END(PL)
     _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __USER_ERROR_MSG), ##args); \
   } while(0)
 #define LOG_MYSQL_USER_ERROR(errcode, args...)                                \
-  LOG_USER_MYSQL(::oceanbase::common::ObLogger::USER_ERROR, errcode, ##args)
+  LOG_USER_MYSQL(::oceanbase::common::USER_ERROR, errcode, ##args)
 #define LOG_MYSQL_USER_WARN(errcode, args...)                                 \
-  LOG_USER_MYSQL(::oceanbase::common::ObLogger::USER_WARN, errcode, ##args)
+  LOG_USER_MYSQL(::oceanbase::common::USER_WARN, errcode, ##args)
 #define LOG_MYSQL_USER_NOTE(errcode, args...)                                 \
-  LOG_USER_MYSQL(::oceanbase::common::ObLogger::USER_NOTE, errcode, ##args)
+  LOG_USER_MYSQL(::oceanbase::common::USER_NOTE, errcode, ##args)
 #define LOG_USER_ERROR(errcode, args...)                                \
-  LOG_USER(::oceanbase::common::ObLogger::USER_ERROR, errcode, ##args)
+  LOG_USER(::oceanbase::common::USER_ERROR, errcode, ##args)
 #define LOG_USER_WARN(errcode, args...)                                 \
-  LOG_USER(::oceanbase::common::ObLogger::USER_WARN, errcode, ##args)
+  LOG_USER(::oceanbase::common::USER_WARN, errcode, ##args)
 #define LOG_USER_NOTE(errcode, args...)                                 \
-  LOG_USER(::oceanbase::common::ObLogger::USER_NOTE, errcode, ##args)
+  LOG_USER(::oceanbase::common::USER_NOTE, errcode, ##args)
 #define LOG_USER_ERROR_LINE_COLUMN(line, column) \
   do {  \
-    OB_LOGGER.log_user_error_line_column(::oceanbase::common::ObLogger::USER_ERROR, line, column);\
+    ::oceanbase::common::log_user_error_line_column(::oceanbase::common::USER_ERROR, line, column);\
   } while(0)
 #define LOG_USER_ERROR_WITH_LINE_COL(errcode, line, column, args...) \
-  LOG_USER(::oceanbase::common::ObLogger::USER_ERROR, errcode, ##args) \
+  LOG_USER(::oceanbase::common::USER_ERROR, errcode, ##args) \
   LOG_USER_ERROR_LINE_COLUMN(line, column)
 
 // NOTE: No special reason, please use LOG_USER_ERROR, LOG_USER_WARN, LOG_USER_NOTE
@@ -1096,17 +1096,17 @@ LOG_MOD_END(PL)
 // For details, refer to the former obcall ob_call_proxy log_user_error_and_warn() usage (RPC transport removed)
 //
 #define FORWARD_USER_ERROR(errcode, args...)                       \
-    _LOG_USER_MSG(::oceanbase::common::ObLogger::USER_ERROR, errcode, "%s", ##args)
+    _LOG_USER_MSG(::oceanbase::common::USER_ERROR, errcode, "%s", ##args)
 
 #define FORWARD_USER_WARN(errcode, args...)                       \
-    _LOG_USER_MSG(::oceanbase::common::ObLogger::USER_WARN, errcode, "%s", ##args)
+    _LOG_USER_MSG(::oceanbase::common::USER_WARN, errcode, "%s", ##args)
 
 #define FORWARD_USER_ERROR_MSG(errcode, fmt, args...)                       \
-    _LOG_USER_MSG(::oceanbase::common::ObLogger::USER_ERROR, errcode, fmt, ##args)
+    _LOG_USER_MSG(::oceanbase::common::USER_ERROR, errcode, fmt, ##args)
 
 #define FORWARD_USER_NOTE(errcode, msg)                                         \
   if (OB_NOT_NULL(msg)) { \
-    OB_LOGGER.insert_warning_buffer(::oceanbase::common::ObLogger::USER_NOTE, errcode, msg, static_cast<int64_t>(strlen(msg))); \
+    ::oceanbase::common::insert_warning_buffer(::oceanbase::common::USER_NOTE, errcode, msg, static_cast<int64_t>(strlen(msg))); \
     if (::oceanbase::common::need_to_print(OB_LOG_LEVEL_WARN)) { \
       ::oceanbase::common::OB_PRINT("", OB_LOG_LEVEL_DIRECT_NO_ERRCODE(WARN), errcode, msg, LOG_KVS("ret", errcode)); \
     } \

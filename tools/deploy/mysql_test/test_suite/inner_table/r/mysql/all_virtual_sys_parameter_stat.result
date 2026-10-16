@@ -135,9 +135,6 @@ storage_high_thread_score
 storage_rowsets_size
 strict_check_os_params
 sync_io_thread_count
-syslog_compress_func
-syslog_disk_size
-syslog_file_uncompressed_count
 syslog_io_bandwidth_limit
 syslog_level
 sys_bkgd_net_percentage

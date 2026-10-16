@@ -101,6 +101,7 @@ all_def_keywords = OrderedDict()
 all_agent_virtual_tables = []
 all_iterate_virtual_tables = []
 all_iterate_private_virtual_tables = []
+all_local_tables = []
 all_local_virtual_tables = []
 cluster_private_tables = []
 core_related_tables = []
@@ -1756,9 +1757,9 @@ def local_column_enum(name):
   return ''.join(part.capitalize() for part in name.split('_'))
 
 
-def def_local_table(table_name, table_id, namespace, namespace_id, columns,
-                    primary_key, indexes=()):
-  """Define storage and its read-only virtual table from the same columns.
+def def_local_table(table_name, namespace, namespace_id, columns,
+                    primary_key, indexes=(), virtual_table=False, table_id=None):
+  """Define local storage, optionally exposing a read-only virtual table.
 
   Column tuples use the regular inner-table format: name, SQL type, nullable,
   optional SQL default. Their order is the stored row layout.
@@ -1770,9 +1771,10 @@ def def_local_table(table_name, table_id, namespace, namespace_id, columns,
     raise ValueError('Unknown local key or index column: ' + table_name)
   if not 0 <= namespace_id <= 255:
     raise ValueError('Local namespace ID is out of range: ' + table_name)
-  for kw in all_local_virtual_tables:
-    storage = kw['storage']
-    if storage and (storage['namespace_id'] == namespace_id or storage['namespace'] == namespace):
+  if virtual_table and table_id is None:
+    raise ValueError('Missing virtual table ID: ' + table_name)
+  for storage in all_local_tables:
+    if storage['namespace_id'] == namespace_id or storage['namespace'] == namespace:
       raise ValueError('Duplicate local namespace: ' + namespace)
   for column in columns:
     local_column_kind(column[1])
@@ -1780,8 +1782,10 @@ def def_local_table(table_name, table_id, namespace, namespace_id, columns,
       raise ValueError('Invalid local column nullability: ' + column[0])
   storage = dict(namespace=namespace, namespace_id=namespace_id,
                  columns=columns, primary_key=primary_key, indexes=indexes)
-  _def_local_virtual_table(table_id, table_name.replace('__all_', '__all_virtual_', 1),
-                           columns, primary_key, storage)
+  all_local_tables.append(storage)
+  if virtual_table:
+    _def_local_virtual_table(table_id, table_name.replace('__all_', '__all_virtual_', 1),
+                             columns, primary_key, storage)
 
 
 def def_config_virtual_table(table_id, table_name, columns, primary_key):
@@ -1814,10 +1818,7 @@ def generate_local_table_schema():
     f.write('// Generated from ob_inner_table_schema_def.py. Do not edit.\n')
     f.write('#include "share/storage/local_store.h"\n\n')
     f.write('namespace oceanbase { namespace share {\n\n')
-    for kw in all_local_virtual_tables:
-      storage = kw['storage']
-      if storage is None:
-        continue
+    for storage in all_local_tables:
       namespace = storage['namespace']
       f.write('namespace {0}\n{{\n'.format(namespace))
       f.write('enum Column : uint32_t {{ {0} }};\n'.format(', '.join(

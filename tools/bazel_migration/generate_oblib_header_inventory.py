@@ -148,7 +148,7 @@ def _header_category(header):
         return "db_values"
 
     family = parts[1] if len(parts) > 2 else "core"
-    if family == "compress" or header == "lib/oblog/ob_log_compressor.h":
+    if family == "compress":
         return "compression"
     if family == "restore":
         return "restore"
@@ -214,6 +214,10 @@ def _quote_list(values, indent="        "):
 
 
 def _resolve_include(source, include, headers, by_basename):
+    # Emscripten headers belong to the compiler sysroot. Basename fallback
+    # would otherwise mistake emscripten/threading.h for zstd's threading.h.
+    if include.startswith("emscripten/"):
+        return None
     stripped = (
         include[len("src/oblib/") :]
         if include.startswith("src/oblib/")

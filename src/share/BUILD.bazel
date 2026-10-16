@@ -947,19 +947,10 @@ cc_library(
     ],
 )
 
-_TASK_CONTROL_UNITY_GROUP = share_select_unity_sources(
-    SHARE_UNITY_GROUPS,
-    "task_control",
-    ["src/share/ob_task_define.cpp"],
-)
-
-seekdb_semantic_unity_cc_library(
+cc_library(
     name = "task_control",
-    owner_package = "src/share",
-    unity_groups = [_TASK_CONTROL_UNITY_GROUP],
-    public_hdrs = [
+    hdrs = [
         "ob_force_print_log.h",
-        "ob_task_define.h",
     ],
     deps = ["//src/oblib:oblib_foundation"],
     features = ["layering_check"],
@@ -1760,9 +1751,6 @@ seekdb_semantic_unity_cc_library(
     ),
     group_implementation_deps = share_runtime_group_oblib_deps(
         _SHARE_RUNTIME_UNITY_GROUPS,
-        {
-            "ob_share_redolog_0": [":config"],
-        },
     ),
     implementation_deps = [
         ":_share_implementation_headers",

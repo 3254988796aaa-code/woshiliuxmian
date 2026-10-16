@@ -163,7 +163,6 @@ _OBLIB_COMPILE_DEPS = {
         "//src/oblib:oblib_collections_primitives",
         "//src/oblib:oblib_collections_runtime",
         "//src/oblib:oblib_compression",
-        "//src/oblib:oblib_compression_integration",
         "//src/oblib:oblib_compression_support",
         "//src/oblib:oblib_concurrency_advanced",
         "//src/oblib:oblib_concurrency_primitives",

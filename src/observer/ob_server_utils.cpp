@@ -272,9 +272,7 @@ int ObServerUtils::calculate_disk_layout_defaults(int64_t &data_disk_total_size,
   const int64_t DEFAULT_DATA_DISK_PERCENTAGE_ON_SAME_FILESYSTEM = 60;
   const int64_t DEFAULT_CLOG_DISK_PERCENTAGE_ON_SAME_FILESYSTEM = 30;
 
-  // We use sstable_dir as the data disk directory to identify whether the log and data are located
-  // on the same file system, and the storage module will ensure that sstable_dir and slog_dir are
-  // located on the same file system;
+  // Compare data and transaction-log filesystems to choose their default disk shares.
   const char* data_dir = OB_FILE_SYSTEM_ROUTER.get_sstable_dir();
   const char* clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
 

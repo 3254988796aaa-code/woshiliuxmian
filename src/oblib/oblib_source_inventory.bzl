@@ -19,7 +19,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/common/ob_tablet_id.cpp",
                 "src/oblib/common/ob_timeout_ctx.cpp",
                 "src/oblib/common/ob_version_def.cpp",
-                "src/oblib/common/ob_data_version_mgr.cpp",
             ],
             generated_srcs = [
             ],
@@ -469,17 +468,11 @@ OBLIB_UNITY_GROUPS = {
             name = "oblib_lib_oblog_0",
             language = "c++",
             srcs = [
-                "src/oblib/lib/oblog/ob_async_log_struct.cpp",
-                "src/oblib/lib/oblog/ob_base_log_buffer.cpp",
-                "src/oblib/lib/oblog/ob_base_log_writer.cpp",
-                "src/oblib/lib/oblog/ob_ringbuf_log_writer.cpp",
                 "src/oblib/lib/oblog/ob_log.cpp",
-                "src/oblib/lib/oblog/ob_log_compressor.cpp",
                 "src/oblib/lib/oblog/ob_log_dba_event.cpp",
                 "src/oblib/lib/oblog/ob_log_time_fmt.cpp",
                 "src/oblib/lib/oblog/ob_trace_log.cpp",
                 "src/oblib/lib/oblog/ob_warning_buffer.cpp",
-                "src/oblib/lib/oblog/ob_syslog_rate_limiter.cpp",
             ],
             generated_srcs = [
             ],
@@ -534,6 +527,7 @@ OBLIB_UNITY_GROUPS = {
             name = "oblib_lib_utility_0",
             language = "c++",
             srcs = [
+                "src/oblib/lib/utility/ob_easy_string.cpp",
                 "src/oblib/lib/utility/ob_fast_convert.cpp",
                 "src/oblib/lib/utility/ob_hang_fatal_error.cpp",
                 "src/oblib/lib/utility/ob_platform_utils.cpp",

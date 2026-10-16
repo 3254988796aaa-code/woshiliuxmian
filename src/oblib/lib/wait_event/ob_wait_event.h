@@ -119,10 +119,6 @@ WAIT_EVENT_DEF(DH_LOCAL_SYNC_COND_WAIT, 20010, "datahub local sync conditional w
 WAIT_EVENT_DEF(TASK_THROTTLE_SLEEP, 20200, "sleep: periodic task throttle wait", "sleep_interval", "task errcode", "", CONCURRENCY, true, true)
 
 // share storage 21001-21999
-WAIT_EVENT_DEF(TIERED_BLOCK_WRITE_REMOTE, 21011, "tiered block write remote", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(TIERED_BLOCK_WRITE_LOCAL, 21012, "tiered block write local", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(TIERED_BLOCK_READ_REMOTE, 21013, "tiered block read remote", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(TIERED_BLOCK_READ_LOCAL, 21014, "tiered block read local", "address", "", "", CONCURRENCY, true, true)
 
 // inner sql 30000-30099
 WAIT_EVENT_DEF(INNER_SQL_EXEC_WAIT, 30000, "exec inner sql wait", "wait inner sql class", "inner session id", "", OTHER, true, true)

@@ -158,7 +158,6 @@ SHARE_PUBLIC_HEADER_ROOTS = [
     "ob_tablet_autoincrement_param.h",
     "ob_tablet_local_checksum_operator.h",
     "ob_tablet_meta_table_compaction_operator.h",
-    "ob_task_define.h",
     "ob_telemetry.h",
     "ob_thread_pool.h",
     "ob_throttling_utils.h",
@@ -179,7 +178,6 @@ SHARE_PUBLIC_HEADER_ROOTS = [
     "rc/ob_context.h",
     "rc/ob_server_module_init_ctx.h",
     "rc/ob_server_runtime.h",
-    "redolog/ob_log_file_handler.h",
     "resource/ob_server_resource_config.h",
     "resource/ob_server_runtime_config.h",
     "resource_limit_calculator/ob_resource_limit_calculator.h",
@@ -222,7 +220,6 @@ SHARE_PUBLIC_HEADER_ROOTS = [
     "schema/ob_user_sql_service.h",
     "scn.h",
     "semistruct/ob_sub_column_path.h",
-    "server_snapshot/ob_server_snapshot_id.h",
     "session/ob_local_session_var.h",
     "statement/ob_stmt_type.h",
     "storage/local_store.h",
@@ -304,9 +301,6 @@ SHARE_INTERFACE_CLOSURE_HEADERS = [
     "ob_lease_struct.h",
     "ob_server_status.h",
     "ob_server_switchover_status.h",
-    "redolog/ob_log_definition.h",
-    "redolog/ob_log_file_group.h",
-    "redolog/ob_log_policy.h",
     "resource/ob_server_resource.h",
     "resource_limit_calculator/ob_resource_commmon.h",
     "resource_limit_calculator/ob_resource_limit_calculator_def.h",
@@ -330,6 +324,7 @@ SHARE_INTERFACE_CLOSURE_HEADERS = [
     "storage/ob_column_checksum_error_info_table_storage.h",
     "tablet/ob_tablet_meta_table_storage.h",
     "text_analysis/ob_token_stream.h",
+    "wasm_aio.h",
 ]
 
 SHARE_PRIVATE_HEADERS = [
@@ -374,9 +369,6 @@ SHARE_PRIVATE_HEADERS = [
     "ob_statvfs_win32.h",
     "ob_tablet_compaction_checksum_operator.h",
     "rc/ob_server_runtime_support.h",
-    "redolog/ob_clog_switch_write_callback.h",
-    "redolog/ob_log_file_reader.h",
-    "redolog/ob_log_write_callback.h",
     "schema/ob_ai_model_schema_getter_guard.ipp",
     "schema/ob_context_type.h",
     "schema/ob_partition_array_utils.h",
@@ -384,7 +376,6 @@ SHARE_PRIVATE_HEADERS = [
     "schema/ob_schema_macro_define.h",
     "schema/ob_table_iter.h",
     "storage/ob_merge_info_table_storage.h",
-    "unit/ob_server_resource_config.h",
 ]
 
 SHARE_IMPLEMENTATION_HEADERS = (

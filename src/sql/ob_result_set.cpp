@@ -807,7 +807,7 @@ int ObResultSet::do_close(int *client_ret)
   bool async = false; // for debug purpose
   if (OB_NOT_NULL(physical_plan_)) {
     if (is_end_trans_async()) {
-      ObCurTraceId::TraceId *cur_trace_id = NULL;
+      const ObCurTraceId::TraceId *cur_trace_id = NULL;
       if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id())) {
         ret = OB_ERR_UNEXPECTED;
         set_end_trans_async(false);

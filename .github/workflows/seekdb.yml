@@ -36,29 +36,27 @@ jobs:
   seekdb-setup:
     name: setup
     if: ${{ github.repository_owner == 'oceanbase' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
-    runs-on: arc-runner-k8s-ci-org
+    runs-on: arc-runner-k8s-ci-org-25c100g
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
     steps:
       - name: Checkout source
         shell: bash
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
         run: |
           set -euo pipefail
-
-          if [[ -n "${SSH_PRIVATE_KEY:-}" ]]; then
-            KEY_FILE="${RUNNER_TEMP}/seekdb-ci-checkout-key"
-            trap 'rm -f "$KEY_FILE"' EXIT
-            umask 077
-            printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$KEY_FILE"
-            export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-            REMOTE_URL="ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
-            echo "SEEKDB_CI_CHECKOUT_KEY is available; using SSH checkout"
-          else
-            REMOTE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-            echo "SEEKDB_CI_CHECKOUT_KEY is unavailable; using HTTPS checkout"
+          KEY_FILE="/obshared/seekdb/id_rsa"
+          KNOWN_HOSTS="/obshared/seekdb/known_hosts"
+          if [[ ! -r "$KEY_FILE" ]]; then
+            echo "GitHub checkout private key is unavailable: $KEY_FILE" >&2
+            exit 1
           fi
+          if [[ ! -r "$KNOWN_HOSTS" ]]; then
+            echo "GitHub known_hosts file is unavailable: $KNOWN_HOSTS" >&2
+            exit 1
+          fi
+          export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=$KNOWN_HOSTS"
+          REMOTE_URL="ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
+          echo "Using runner-mounted SSH key for GitHub checkout"
 
           git init "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
@@ -242,7 +240,7 @@ jobs:
   seekdb-mysqltest:
     name: mysqltest-slice-${{ matrix.slice }}
     needs: seekdb-setup
-    runs-on: arc-runner-k8s-ci-org
+    runs-on: arc-runner-k8s-ci-org-4c8g
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
     strategy:

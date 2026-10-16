@@ -1913,7 +1913,7 @@ int ObMPStmtExecute::process()
   bool async_resp_used = false; // Asynchronously reply to the client by the transaction commit thread
   int64_t query_timeout = 0;
 
-  ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
+  const ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
   ObSMConnection *conn = get_conn();
   if (OB_ISNULL(req_) || OB_ISNULL(conn) || OB_ISNULL(cur_trace_id)) {
     ret = OB_ERR_UNEXPECTED;
